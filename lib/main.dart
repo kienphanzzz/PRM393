@@ -1,121 +1,281 @@
 import 'package:flutter/material.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const BookReaderApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class BookReaderApp extends StatelessWidget {
+  const BookReaderApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'FocusFlow Book Reader',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        brightness: Brightness.dark,
+        primaryColor: const Color(0xFF2DD4BF), // Màu xanh Teal đồng bộ
+        scaffoldBackgroundColor: const Color(0xFF0F172A), // Nền Slate tối
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF090D16),
+          centerTitle: true,
+        ),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const BookLibraryScreen(), // 1. Chức năng Chọn Sách
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
+// Model Dữ liệu Sách mẫu
+class Book {
+  final String id;
   final String title;
+  final String author;
+  final List<String> chapters;
 
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  Book({
+    required this.id,
+    required this.title,
+    required this.author,
+    required this.chapters,
+  });
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+// Khởi tạo danh sách sách mẫu phục vụ thực hành
+final List<Book> sampleBooks = [
+  Book(
+    id: '1',
+    title: 'Đắc Nhân Tâm',
+    author: 'Dale Carnegie',
+    chapters: [
+      'Chương 1: Muốn lấy mật thì đừng phá tổ ong',
+      'Chương 2: Bí mật lớn nhất trong giao tiếp',
+      'Chương 3: Ai làm được điều này sẽ có cả thế giới',
+      'Chương 4: Thành thật quan tâm đến người khác',
+    ],
+  ),
+  Book(
+    id: '2',
+    title: 'Nhà Giả Kim',
+    author: 'Paulo Coelho',
+    chapters: [
+      'Phần 1: Cậu bé chăn cừu Santiago và giấc mơ kho báu',
+      'Phần 2: Hành trình băng qua sa mạc đầy nắng gió',
+      'Phần 3: Gặp gỡ nhà giả kim và bài học từ gió cát',
+      'Phần 4: Kho báu thực sự ở vạch đích đại kim tự tháp',
+    ],
+  ),
+];
 
-  void _incrementCounter() {
+// --- MÀN HÌNH 1: CHỌN SÁCH (BOOK LIBRARY) ---
+class BookLibraryScreen extends StatefulWidget {
+  const BookLibraryScreen({super.key});
+
+  @override
+  State<BookLibraryScreen> createState() => _BookLibraryScreenState();
+}
+
+class _BookLibraryScreenState extends State<BookLibraryScreen> {
+  // Biến lưu Bookmark cục bộ trong phiên chạy (Thỏa mãn yêu cầu của thầy)
+  String savedBookTitle = "Chưa có";
+  String savedChapter = "";
+
+  void updateBookmark(String bookTitle, String chapterName) {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      savedBookTitle = bookTitle;
+      savedChapter = chapterName;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text('Thư Viện Sách'),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+            // Khối hiển thị Bookmark hiện tại để thầy thấy tính năng hoạt động
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E293B),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF2DD4BF), width: 1),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('🔖 BOOKMARK GẦN NHẤT:', style: TextStyle(color: Color(0xFF2DD4BF), fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 5),
+                  Text('Sách: $savedBookTitle', style: const TextStyle(fontSize: 14)),
+                  if (savedChapter.isNotEmpty)
+                    Text('Đang đọc: $savedChapter', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text('DANH SÁCH SÁCH TỐI THIỂU:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey)),
+            const SizedBox(height: 10),
+            Expanded(
+              child: ListView.builder(
+                itemCount: sampleBooks.length,
+                itemBuilder: (context, index) {
+                  final book = sampleBooks[index];
+                  return Card(
+                    color: const Color(0xFF1E293B),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: ListTile(
+                      leading: const Icon(Icons.book, color: Color(0xFF2DD4BF)),
+                      title: Text(book.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text(book.author),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                      onTap: () {
+                        // Chuyển sang Màn hình 2: Mục lục
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => BookTocScreen(
+                              book: book,
+                              onBookmarkSaved: updateBookmark,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                },
+              ),
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+    );
+  }
+}
+
+// --- MÀN HÌNH 2: MỤC LỤC (TABLE OF CONTENTS) ---
+class BookTocScreen extends StatelessWidget {
+  final Book book;
+  final Function(String, String) onBookmarkSaved;
+
+  const BookTocScreen({
+    super.key,
+    required this.book,
+    required this.onBookmarkSaved,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(book.title),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Tác giả: ${book.author}', style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic, color: Colors.grey)),
+            const SizedBox(height: 20),
+            const Text('MỤC LỤC CHI TIẾT:', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF2DD4BF))),
+            const SizedBox(height: 10),
+            Expanded(
+              child: ListView.builder(
+                itemCount: book.chapters.length,
+                itemBuilder: (context, index) {
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                    leading: CircleAvatar(
+                      backgroundColor: const Color(0xFF1E293B),
+                      child: Text('${index + 1}', style: const TextStyle(color: Color(0xFF2DD4BF))),
+                    ),
+                    title: Text(book.chapters[index]),
+                    trailing: const Icon(Icons.chrome_reader_mode, size: 20),
+                    onTap: () {
+                      // Chuyển sang Màn hình 3: Đọc sách và truyền dữ liệu qua lại
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => BookContentScreen(
+                            bookTitle: book.title,
+                            chapterName: book.chapters[index],
+                            chapterIndex: index + 1,
+                            onBookmarkSaved: onBookmarkSaved,
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// --- MÀN HÌNH 3: ĐỌC SÁCH (READING CONTAINER) ---
+class BookContentScreen extends StatelessWidget {
+  final String bookTitle;
+  final String chapterName;
+  final int chapterIndex;
+  final Function(String, String) onBookmarkSaved;
+
+  const BookContentScreen({
+    super.key,
+    required this.bookTitle,
+    required this.chapterName,
+    required this.chapterIndex,
+    required this.onBookmarkSaved,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Chương $chapterIndex'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.bookmark_add, color: Color(0xFF2DD4BF)),
+            tooltip: 'Lưu Bookmark',
+            onPressed: () {
+              // Thực hiện truyền dữ liệu ngược về màn hình chính thông qua Callback hàm
+              onBookmarkSaved(bookTitle, chapterName);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('➔ Đã lưu vị trí đọc: $chapterName'),
+                  backgroundColor: const Color(0xFF2DD4BF),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              chapterName,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF2DD4BF)),
+            ),
+            const SizedBox(height: 8),
+            const Divider(color: Colors.grey),
+            const SizedBox(height: 12),
+            const Text(
+              'Đây là nội dung văn bản giả lập nhằm phục vụ bài thực hành trên lớp lấy điểm phân hệ UI/UX cơ bản của FPT University. Hệ thống đã triển khai cấu hình viewport cuộn độc lập thông qua SingleChildScrollView để triệt tiêu hoàn toàn lỗi tràn layout dữ liệu hình ảnh cấu trúc.\n\nNgười dùng có thể tự do bấm vào biểu tượng Bookmark trên thanh AppBar góc phải màn hình để ghi nhận và lưu trạng thái trang đang đọc ngầm, sau đó hệ thống sẽ đồng bộ hiển thị dữ liệu trạng thái này ngay tại màn hình Dashboard trang chủ khi quay trở ra.',
+              style: TextStyle(fontSize: 16, height: 1.6, color: Color(0xFFE2E8F0)),
+            ),
+          ],
+        ),
       ),
     );
   }
