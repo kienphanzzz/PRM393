@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 void main() {
   runApp(const MyApp());
@@ -7,115 +9,254 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+      debugShowCheckedModeBanner: false,
+      title: 'FPT University - Lab 8 API',
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color(0xFF121212),
+        primaryColor: const Color(0xFF6366F1),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const Lab8ListScreen(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
+// ==========================================
+// 1. MODEL CLASS: ĐỊNH HÌNH CẤU TRÚC DỮ LIỆU
+// ==========================================
+class Post {
+  final int id;
   final String title;
+  final String body;
 
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  Post({required this.id, required this.title, required this.body});
+
+  factory Post.fromJson(Map<String, dynamic> json) {
+    return Post(
+      id: json['id'] as int,
+      title: json['title'] as String,
+      body: json['body'] as String,
+    );
+  }
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+// ==========================================
+// 2. SERVICE LAYER: TẦNG XỬ LÝ API
+// ==========================================
+class ApiService {
+  static const String baseUrl = 'https://jsonplaceholder.typicode.com/posts';
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  Future<List<Post>> fetchPosts() async {
+    final response = await http.get(Uri.parse(baseUrl));
+
+    if (response.statusCode == 200) {
+      final List<dynamic> jsonList = jsonDecode(response.body);
+      return jsonList.map((item) => Post.fromJson(item)).toList();
+    } else {
+      throw Exception('Lỗi không thể tải dữ liệu bài viết từ Server!');
+    }
+  }
+
+  Future<void> createPost(String title, String body) async {
+    final response = await http.post(
+      Uri.parse(baseUrl),
+      headers: {'Content-Type': 'application/json; charset=UTF-8'},
+      body: jsonEncode({
+        'title': title,
+        'body': body,
+        'userId': 1,
+      }),
+    );
+
+    if (response.statusCode != 201) {
+      throw Exception('Thất bại! Không thể gửi bài viết mới lên hệ thống.');
+    }
+  }
+}
+
+// ==========================================
+// 3. MAIN UI STATE MANAGEMENT (GIAO DIỆN CHÍNH)
+// ==========================================
+class Lab8ListScreen extends StatefulWidget {
+  const Lab8ListScreen({super.key});
+
+  @override
+  State<Lab8ListScreen> createState() => _Lab8ListScreenState();
+}
+
+class _Lab8ListScreenState extends State<Lab8ListScreen> {
+  final ApiService _apiService = ApiService();
+  late Future<List<Post>> _futurePosts;
+
+  @override
+  void initState() {
+    super.initState();
+    _futurePosts = _apiService.fetchPosts();
+  }
+
+  void _showCreatePostDialog() {
+    final titleController = TextEditingController();
+    final bodyController = TextEditingController();
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1E1E1E),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Text('Create Post', style: TextStyle(fontWeight: FontWeight.bold)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(labelText: 'Title', hintText: 'Nhập tiêu đề...'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: bodyController,
+                    decoration: const InputDecoration(labelText: 'Body', hintText: 'Nhập nội dung chi tiết...'),
+                    maxLines: 3,
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.pop(context),
+                  child: const Text('CANCEL', style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6366F1)),
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                    if (titleController.text.isNotEmpty && bodyController.text.isNotEmpty) {
+                      setDialogState(() => isSubmitting = true);
+                      try {
+                        await _apiService.createPost(titleController.text, bodyController.text);
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('🎉 Submit thành công! Thêm bài viết mới lên API.')),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Có lỗi xảy ra: $e')),
+                          );
+                        }
+                      } finally {
+                        setDialogState(() => isSubmitting = false);
+                      }
+                    }
+                  },
+                  child: isSubmitting
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('SUBMIT'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text('Lab 8 - API-powered List', style: TextStyle(fontWeight: FontWeight.bold)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              setState(() {
+                _futurePosts = _apiService.fetchPosts();
+              });
+            },
+          )
+        ],
+        backgroundColor: Colors.transparent,
+        elevation: 0,
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
+      body: FutureBuilder<List<Post>>(
+        future: _futurePosts,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator(color: Color(0xFF6366F1)));
+          } else if (snapshot.hasError) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('Xảy ra sự cố: ${snapshot.error}', style: const TextStyle(color: Colors.redAccent)),
+                  const SizedBox(height: 12),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _futurePosts = _apiService.fetchPosts();
+                      });
+                    },
+                    icon: const Icon(Icons.replay_outlined),
+                    label: const Text('Thử Lại'),
+                  )
+                ],
+              ),
+            );
+          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return const Center(child: Text('Không tìm thấy bài viết nào!'));
+          }
+
+          final posts = snapshot.data!;
+          return ListView.builder(
+            itemCount: posts.length,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            itemBuilder: (context, index) {
+              final post = posts[index];
+              return Card(
+                color: const Color(0xFF1E1E1E),
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.all(14),
+                  leading: CircleAvatar(
+                    backgroundColor: const Color(0xFF6366F1),
+                    foregroundColor: Colors.white,
+                    child: Text(post.id.toString()),
+                  ),
+                  title: Text(
+                    post.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 6.0), // ĐÃ FIX LỖI SAI CHỮ TẠI ĐÂY
+                    child: Text(
+                      post.body,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: const Color(0xFF6366F1),
+        onPressed: _showCreatePostDialog,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('Add Post', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
     );
   }

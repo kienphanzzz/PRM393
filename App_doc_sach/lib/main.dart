@@ -13,19 +13,19 @@ class BookReaderApp extends StatelessWidget {
       title: 'FocusFlow Book Reader',
       theme: ThemeData(
         brightness: Brightness.dark,
-        primaryColor: const Color(0xFF2DD4BF), // Màu xanh Teal đồng bộ
-        scaffoldBackgroundColor: const Color(0xFF0F172A), // Nền Slate tối
+        primaryColor: const Color(0xFF2DD4BF),
+        scaffoldBackgroundColor: const Color(0xFF0F172A),
         appBarTheme: const AppBarTheme(
           backgroundColor: Color(0xFF090D16),
           centerTitle: true,
         ),
       ),
-      home: const BookLibraryScreen(), // 1. Chức năng Chọn Sách
+      home: const BookLibraryScreen(),
     );
   }
 }
 
-// Model Dữ liệu Sách mẫu
+
 class Book {
   final String id;
   final String title;
@@ -40,7 +40,7 @@ class Book {
   });
 }
 
-// Khởi tạo danh sách sách mẫu phục vụ thực hành
+
 final List<Book> sampleBooks = [
   Book(
     id: '1',
@@ -66,7 +66,6 @@ final List<Book> sampleBooks = [
   ),
 ];
 
-// --- MÀN HÌNH 1: CHỌN SÁCH (BOOK LIBRARY) ---
 class BookLibraryScreen extends StatefulWidget {
   const BookLibraryScreen({super.key});
 
@@ -75,7 +74,6 @@ class BookLibraryScreen extends StatefulWidget {
 }
 
 class _BookLibraryScreenState extends State<BookLibraryScreen> {
-  // Biến lưu Bookmark cục bộ trong phiên chạy (Thỏa mãn yêu cầu của thầy)
   String savedBookTitle = "Chưa có";
   String savedChapter = "";
 
@@ -97,7 +95,6 @@ class _BookLibraryScreenState extends State<BookLibraryScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Khối hiển thị Bookmark hiện tại để thầy thấy tính năng hoạt động
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
@@ -134,7 +131,6 @@ class _BookLibraryScreenState extends State<BookLibraryScreen> {
                       subtitle: Text(book.author),
                       trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                       onTap: () {
-                        // Chuyển sang Màn hình 2: Mục lục
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -157,7 +153,7 @@ class _BookLibraryScreenState extends State<BookLibraryScreen> {
   }
 }
 
-// --- MÀN HÌNH 2: MỤC LỤC (TABLE OF CONTENTS) ---
+
 class BookTocScreen extends StatelessWidget {
   final Book book;
   final Function(String, String) onBookmarkSaved;
@@ -220,7 +216,7 @@ class BookTocScreen extends StatelessWidget {
   }
 }
 
-// --- MÀN HÌNH 3: ĐỌC SÁCH (READING CONTAINER) ---
+
 class BookContentScreen extends StatelessWidget {
   final String bookTitle;
   final String chapterName;
