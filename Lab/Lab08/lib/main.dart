@@ -22,10 +22,6 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-
-// ==========================================
-// 1. MODEL CLASS: ĐỊNH HÌNH CẤU TRÚC DỮ LIỆU
-// ==========================================
 class Post {
   final int id;
   final String title;
@@ -76,9 +72,7 @@ class ApiService {
   }
 }
 
-// ==========================================
-// 3. MAIN UI STATE MANAGEMENT (GIAO DIỆN CHÍNH)
-// ==========================================
+
 class Lab8ListScreen extends StatefulWidget {
   const Lab8ListScreen({super.key});
 
