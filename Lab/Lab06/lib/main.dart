@@ -1,121 +1,314 @@
 import 'package:flutter/material.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const ResponsiveMovieApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class Movie {
+  final String title;
+  final int year;
+  final List<String> genres;
+  final String posterUrl;
+  final double rating;
 
-  // This widget is the root of your application.
+  const Movie({
+    required this.title,
+    required this.year,
+    required this.genres,
+    required this.posterUrl,
+    required this.rating,
+  });
+}
+
+const List<Movie> allMovies = [
+  Movie(
+    title: 'The Dark Knight',
+    year: 2008,
+    genres: ['Action', 'Drama'],
+    posterUrl: 'https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?w=500',
+    rating: 9.0,
+  ),
+  Movie(
+    title: 'Inception',
+    year: 2010,
+    genres: ['Action', 'Sci-Fi'],
+    posterUrl: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=500',
+    rating: 8.8,
+  ),
+  Movie(
+    title: 'Pulp Fiction',
+    year: 1994,
+    genres: ['Crime', 'Drama'],
+    posterUrl: 'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?w=500',
+    rating: 8.9,
+  ),
+  Movie(
+    title: 'The Hangover',
+    year: 2009,
+    genres: ['Comedy'],
+    posterUrl: 'https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?w=500',
+    rating: 7.7,
+  ),
+  Movie(
+    title: 'Interstellar',
+    year: 2014,
+    genres: ['Adventure', 'Sci-Fi'],
+    posterUrl: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=500',
+    rating: 8.6,
+  ),
+];
+
+class ResponsiveMovieApp extends StatelessWidget {
+  const ResponsiveMovieApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      debugShowCheckedModeBanner: false,
+      title: 'Responsive Movie App',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const GenreScreen(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class GenreScreen extends StatefulWidget {
+  const GenreScreen({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<GenreScreen> createState() => _GenreScreenState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _GenreScreenState extends State<GenreScreen> {
+  String _searchQuery = '';
+  final Set<String> _selectedGenres = {};
+  String _selectedSort = 'A–Z';
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
+  final List<String> _availableGenres = [
+    'Action',
+    'Drama',
+    'Sci-Fi',
+    'Crime',
+    'Comedy',
+    'Adventure'
+  ];
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    List<Movie> visibleMovies = allMovies.where((movie) {
+      final matchesSearch =
+          movie.title.toLowerCase().contains(_searchQuery.toLowerCase());
+      final matchesGenre = _selectedGenres.isEmpty ||
+          movie.genres.any((g) => _selectedGenres.contains(g));
+      return matchesSearch && matchesGenre;
+    }).toList();
+
+    if (_selectedSort == 'A–Z') {
+      visibleMovies.sort((a, b) => a.title.compareTo(b.title));
+    } else if (_selectedSort == 'Z–A') {
+      visibleMovies.sort((a, b) => b.title.compareTo(a.title));
+    } else if (_selectedSort == 'Newest') {
+      visibleMovies.sort((a, b) => b.year.compareTo(a.year));
+    } else if (_selectedSort == 'Top Rated') {
+      visibleMovies.sort((a, b) => b.rating.compareTo(a.rating));
+    }
+
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
+        title: const Text('Movie Explorer'),
+        centerTitle: true,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(110),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: 'Search movies...',
+                    prefixIcon: const Icon(Icons.search),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                  ),
+                  onChanged: (value) {
+                    setState(() {
+                      _searchQuery = value;
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: _availableGenres.map((genre) {
+                    final isSelected = _selectedGenres.contains(genre);
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: FilterChip(
+                        label: Text(genre),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          setState(() {
+                            if (selected) {
+                              _selectedGenres.add(genre);
+                            } else {
+                              _selectedGenres.remove(genre);
+                            }
+                          });
+                        },
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: DropdownButton<String>(
+              value: _selectedSort,
+              underline: const SizedBox(),
+              icon: const Icon(Icons.sort),
+              onChanged: (String? newValue) {
+                if (newValue != null) {
+                  setState(() {
+                    _selectedSort = newValue;
+                  });
+                }
+              },
+              items: <String>['A–Z', 'Z–A', 'Newest', 'Top Rated']
+                  .map<DropdownMenuItem<String>>((String value) {
+                return DropdownMenuItem<String>(
+                  value: value,
+                  child: Text(value),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+      body: visibleMovies.isEmpty
+          ? const Center(child: Text('No movies found'))
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                int crossAxisCount = 2;
+                if (constraints.maxWidth > 600) crossAxisCount = 3;
+                if (constraints.maxWidth > 900) crossAxisCount = 4;
+                if (constraints.maxWidth > 1200) crossAxisCount = 6;
+
+                return GridView.builder(
+                  padding: const EdgeInsets.all(12),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    childAspectRatio: 0.65,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                  ),
+                  itemCount: visibleMovies.length,
+                  itemBuilder: (context, index) {
+                    return MovieCard(movie: visibleMovies[index]);
+                  },
+                );
+              },
+            ),
+    );
+  }
+}
+
+class MovieCard extends StatelessWidget {
+  final Movie movie;
+
+  const MovieCard({super.key, required this.movie});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 4,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: Image.network(
+                    movie.posterUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) =>
+                        const Center(child: Icon(Icons.movie, size: 50)),
+                  ),
+                ),
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.star, color: Colors.amber, size: 14),
+                        const SizedBox(width: 2),
+                        Text(
+                          movie.rating.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  movie.title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${movie.year} • ${movie.genres.join(', ')}',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 12,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
