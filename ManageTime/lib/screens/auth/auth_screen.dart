@@ -72,7 +72,6 @@ class AuthScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              // NÚT ĐĂNG NHẬP CHÍNH
               SizedBox(
                 width: double.infinity,
                 height: 54,
@@ -82,7 +81,6 @@ class AuthScreen extends StatelessWidget {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: () {
-                    // TẠM THỜI: Click phát là đẩy thẳng vào Home Dashboard để test UI
                     Navigator.pushReplacement(
                       context,
                       MaterialPageRoute(builder: (context) => const DashboardScreen()),
@@ -92,7 +90,6 @@ class AuthScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 20),
-              // THANH HOẶC ĐĂNG NHẬP BẰNG GOOGLE
               const Row(
                 children: [
                   Expanded(child: Divider(color: Colors.white24)),
@@ -104,7 +101,6 @@ class AuthScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 20),
-              // NÚT ĐĂNG NHẬP GOOGLE
               SizedBox(
                 width: double.infinity,
                 height: 54,
@@ -113,7 +109,7 @@ class AuthScreen extends StatelessWidget {
                     side: const BorderSide(color: Colors.white24),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  onPressed: () {}, // Xử lý liên kết Google SDK sau
+                  onPressed: () {},
                   icon: const Icon(Icons.g_mobiledata, color: Colors.white, size: 30),
                   label: const Text('Continue with Google', style: TextStyle(color: Colors.white, fontSize: 15)),
                 ),
@@ -125,7 +121,6 @@ class AuthScreen extends StatelessWidget {
                   const Text("Don't have an account? ", style: TextStyle(color: AppColors.textMuted)),
                   GestureDetector(
                     onTap: () {
-                      // Chuyển sang màn hình Đăng ký
                       Navigator.push(
                         context,
                         MaterialPageRoute(builder: (context) => const RegisterScreen()),
