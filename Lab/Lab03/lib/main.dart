@@ -1,122 +1,131 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
+import 'dart:convert';
 
-void main() {
-  runApp(const MyApp());
+class Product {
+  final int id;
+  final String name;
+  final double price;
+
+  Product({required this.id, required this.name, required this.price});
+
+  @override
+  String toString() => 'Product(id: $id, name: $name, price: $price)';
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class ProductRepository {
+  final List<Product> _products = [
+    Product(id: 1, name: 'Laptop', price: 1200.0),
+    Product(id: 2, name: 'Phone', price: 800.0),
+  ];
 
-  // This widget is the root of your application.
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+  final StreamController<Product> _controller = StreamController<Product>.broadcast();
+
+  Future<List<Product>> getAll() async {
+    await Future.delayed(const Duration(milliseconds: 500));
+    return _products;
+  }
+
+  Stream<Product> liveAdded() => _controller.stream;
+
+  void addProduct(Product product) {
+    _products.add(product);
+    _controller.add(product);
+  }
+
+  void dispose() {
+    _controller.close();
+  }
+}
+
+class User {
+  final String name;
+  final String email;
+
+  User({required this.name, required this.email});
+
+  factory User.fromJson(Map<String, dynamic> json) {
+    return User(
+      name: json['name'] as String,
+      email: json['email'] as String,
     );
   }
-}
-
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  String toString() => 'User(name: $name, email: $email)';
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+Future<List<User>> fetchUsers() async {
+  await Future.delayed(const Duration(milliseconds: 500));
+  String jsonMock = '[{"name": "Kien", "email": "kien@fpt.edu.vn"}, {"name": "An", "email": "an@fpt.edu.vn"}]';
+  List<dynamic> decoded = jsonDecode(jsonMock) as List<dynamic>;
+  return decoded.map((item) => User.fromJson(item as Map<String, dynamic>)).toList();
+}
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+class Settings {
+  final String theme;
+  static final Map<String, Settings> _cache = <String, Settings>{};
+
+  Settings._internal(this.theme);
+
+  factory Settings(String theme) {
+    return _cache.putIfAbsent(theme, () => Settings._internal(theme));
+  }
+}
+
+void main() async {
+  print('--- EXERCISE 1 ---');
+  ProductRepository repo = ProductRepository();
+
+  repo.liveAdded().listen((product) {
+    print('Live product added: $product');
+  });
+
+  List<Product> allProducts = await repo.getAll();
+  print('All products: $allProducts');
+
+  repo.addProduct(Product(id: 3, name: 'Tablet', price: 400.0));
+  await Future.delayed(const Duration(milliseconds: 100));
+
+
+  print('\n--- EXERCISE 2 ---');
+  List<User> users = await fetchUsers();
+  print('Parsed users: $users');
+
+
+  print('\n--- EXERCISE 3 ---');
+  print('1. Main Start');
+
+  Future(() {
+    print('4. Event Queue Callback');
+  });
+
+  scheduleMicrotask(() {
+    print('3. Microtask Queue Callback');
+  });
+
+  print('2. Main End');
+  await Future.delayed(const Duration(milliseconds: 100));
+
+
+  print('\n--- EXERCISE 4 ---');
+  Stream<int> numStream = Stream<int>.fromIterable([1, 2, 3, 4, 5]);
+
+  Stream<int> transformedStream = numStream
+      .map((n) => n * n)
+      .where((squared) => squared % 2 == 0);
+
+  await for (int val in transformedStream) {
+    print('Transformed value: $val');
   }
 
-  @override
-  Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
+
+  print('\n--- EXERCISE 5 ---');
+  Settings instanceA = Settings('dark');
+  Settings instanceB = Settings('dark');
+
+  print('Instance A hash: ${instanceA.hashCode}');
+  print('Instance B hash: ${instanceB.hashCode}');
+  print('Are instances identical? ${identical(instanceA, instanceB)}');
+
+  repo.dispose();
 }
