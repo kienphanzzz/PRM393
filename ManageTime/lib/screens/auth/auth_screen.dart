@@ -22,9 +22,12 @@ class _AuthScreenState extends State<AuthScreen> {
 
       if ((email == 'kienphanzzz@gmail.com' && password == '12345678') ||
           (email == AppTempStorage.registeredEmail && password == AppTempStorage.registeredPassword && AppTempStorage.registeredEmail.isNotEmpty)) {
+
+        String loginName = (email == AppTempStorage.registeredEmail) ? AppTempStorage.registeredName : 'User';
+
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const DashboardScreen()),
+          MaterialPageRoute(builder: (context) => DashboardScreen(userName: loginName)),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -175,11 +178,18 @@ class _AuthScreenState extends State<AuthScreen> {
                   children: [
                     const Text("Don't have an account? ", style: TextStyle(color: AppColors.textMuted)),
                     GestureDetector(
-                      onTap: () {
-                        Navigator.push(
+                      onTap: () async {
+                        final result = await Navigator.push(
                           context,
                           MaterialPageRoute(builder: (context) => const RegisterScreen()),
                         );
+                        if (result == true) {
+                          setState(() {
+                            _formKey.currentState?.reset();
+                            _emailController.clear();
+                            _passwordController.clear();
+                          });
+                        }
                       },
                       child: const Text("Sign Up", style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
                     ),

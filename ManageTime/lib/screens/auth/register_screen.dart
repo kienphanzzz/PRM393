@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/constants.dart';
 
-// Biến static toàn cục để lưu tài khoản tạm thời
 class AppTempStorage {
+  static String registeredName = '';
   static String registeredEmail = '';
   static String registeredPassword = '';
 }
@@ -48,7 +48,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
               const SizedBox(height: 8),
               const Text('Sign up to start tracking your productivity', style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
               const SizedBox(height: 30),
-
               const Text('Full Name', style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(height: 8),
               TextField(
@@ -64,7 +63,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-
               const Text('Email Address', style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(height: 8),
               TextField(
@@ -81,7 +79,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-
               const Text('Phone Number', style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(height: 8),
               TextField(
@@ -98,7 +95,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-
               const Text('Password', style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(height: 8),
               TextField(
@@ -115,7 +111,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
               ),
               const SizedBox(height: 32),
-
               SizedBox(
                 width: double.infinity,
                 height: 54,
@@ -125,18 +120,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: () {
-                    if (_emailController.text.isNotEmpty && _passwordController.text.isNotEmpty) {
-                      // Ghi nhận dữ liệu vừa gõ vào bộ nhớ tạm toàn cục
+                    if (_emailController.text.isNotEmpty && _passwordController.text.isNotEmpty && _nameController.text.isNotEmpty) {
+                      AppTempStorage.registeredName = _nameController.text.trim();
                       AppTempStorage.registeredEmail = _emailController.text.trim();
                       AppTempStorage.registeredPassword = _passwordController.text.trim();
 
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text('Đăng ký thành công tài khoản: ${AppTempStorage.registeredEmail}')),
                       );
-                      Navigator.pop(context);
+                      Navigator.pop(context, true);
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(backgroundColor: Colors.orange, content: Text('Vui lòng điền Email và Password')),
+                        const SnackBar(backgroundColor: Colors.orange, content: Text('Vui lòng điền đầy đủ thông tin')),
                       );
                     }
                   },

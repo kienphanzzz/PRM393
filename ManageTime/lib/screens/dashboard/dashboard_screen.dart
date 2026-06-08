@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../core/constants.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  final String userName;
+  const DashboardScreen({super.key, this.userName = 'User'});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -10,6 +13,31 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _currentIndex = 2;
+  late String _timeString;
+  late String _dateString;
+  late Timer _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timeString = DateFormat('HH:mm:ss').format(DateTime.now());
+    _dateString = DateFormat('EEEE, MMM dd, yyyy').format(DateTime.now());
+    _timer = Timer.periodic(const Duration(seconds: 1), (Timer t) => _updateTime());
+  }
+
+  void _updateTime() {
+    final DateTime now = DateTime.now();
+    setState(() {
+      _timeString = DateFormat('HH:mm:ss').format(now);
+      _dateString = DateFormat('EEEE, MMM dd, yyyy').format(now);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,9 +55,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Hello, User!', style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Text('Wednesday, Jan 15, 2025', style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
+                      Text('Hello, ${widget.userName}!', style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      Text('$_dateString | $_timeString', style: const TextStyle(color: AppColors.primary, fontSize: 14, fontWeight: FontWeight.w500)),
                     ],
                   ),
                   Stack(
@@ -71,9 +99,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
               const SizedBox(height: 10),
-              _buildTaskItem(Icons.description, 'Finish project report', 'Due at 3:00 PM', Colors.blue.withValues(alpha: 0.2)),
-              _buildTaskItem(Icons.groups, 'Team standup meeting', '4:30 PM - 5:00 PM', Colors.green.withValues(alpha: 0.2)),
-              _buildTaskItem(Icons.fitness_center, 'Evening workout', '6:00 PM - 7:00 PM', Colors.purple.withValues(alpha: 0.2)),
+              _buildTaskItem(Icons.description, 'Finish project report', 'Due at 3:00 PM', Colors.blue.withOpacity(0.2)),
+              _buildTaskItem(Icons.groups, 'Team standup meeting', '4:30 PM - 5:00 PM', Colors.green.withOpacity(0.2)),
+              _buildTaskItem(Icons.fitness_center, 'Evening workout', '6:00 PM - 7:00 PM', Colors.purple.withOpacity(0.2)),
             ],
           ),
         ),
@@ -108,7 +136,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          CircleAvatar(radius: 18, backgroundColor: iconColor.withValues(alpha: 0.2), child: Icon(icon, color: iconColor, size: 20)),
+          CircleAvatar(radius: 18, backgroundColor: iconColor.withOpacity(0.2), child: Icon(icon, color: iconColor, size: 20)),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
