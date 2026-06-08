@@ -71,9 +71,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
               const SizedBox(height: 10),
-              _buildTaskItem(Icons.description, 'Finish project report', 'Due at 3:00 PM', Colors.blue.withOpacity(0.2)),
-              _buildTaskItem(Icons.groups, 'Team standup meeting', '4:30 PM - 5:00 PM', Colors.green.withOpacity(0.2)),
-              _buildTaskItem(Icons.fitness_center, 'Evening workout', '6:00 PM - 7:00 PM', Colors.purple.withOpacity(0.2)),
+              _buildTaskItem(Icons.description, 'Finish project report', 'Due at 3:00 PM', Colors.blue.withValues(alpha: 0.2)),
+              _buildTaskItem(Icons.groups, 'Team standup meeting', '4:30 PM - 5:00 PM', Colors.green.withValues(alpha: 0.2)),
+              _buildTaskItem(Icons.fitness_center, 'Evening workout', '6:00 PM - 7:00 PM', Colors.purple.withValues(alpha: 0.2)),
             ],
           ),
         ),
@@ -108,7 +108,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          CircleAvatar(radius: 18, backgroundColor: iconColor.withOpacity(0.2), child: Icon(icon, color: iconColor, size: 20)),
+          CircleAvatar(radius: 18, backgroundColor: iconColor.withValues(alpha: 0.2), child: Icon(icon, color: iconColor, size: 20)),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

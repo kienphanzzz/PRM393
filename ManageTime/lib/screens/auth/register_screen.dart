@@ -1,8 +1,33 @@
 import 'package:flutter/material.dart';
 import '../../core/constants.dart';
 
-class RegisterScreen extends StatelessWidget {
+// Biến static toàn cục để lưu tài khoản tạm thời
+class AppTempStorage {
+  static String registeredEmail = '';
+  static String registeredPassword = '';
+}
+
+class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
+
+  @override
+  State<RegisterScreen> createState() => _RegisterScreenState();
+}
+
+class _RegisterScreenState extends State<RegisterScreen> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _nameController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -10,25 +35,27 @@ class RegisterScreen extends StatelessWidget {
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 30.0),
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: () => Navigator.pop(context), // Bấm để quay lại trang Login
+                onPressed: () => Navigator.pop(context),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 10),
               const Text('Create Account', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
               const SizedBox(height: 8),
               const Text('Sign up to start tracking your productivity', style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
-              const SizedBox(height: 40),
+              const SizedBox(height: 30),
+
               const Text('Full Name', style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(height: 8),
               TextField(
+                controller: _nameController,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
-                  hintText: 'John Doe',
+                  hintText: 'Enter your full name',
                   hintStyle: const TextStyle(color: AppColors.textMuted),
                   filled: true,
                   fillColor: AppColors.cardBg,
@@ -37,12 +64,15 @@ class RegisterScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 20),
+
               const Text('Email Address', style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(height: 8),
               TextField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
-                  hintText: 'you@example.com',
+                  hintText: 'Enter your email',
                   hintStyle: const TextStyle(color: AppColors.textMuted),
                   filled: true,
                   fillColor: AppColors.cardBg,
@@ -51,9 +81,28 @@ class RegisterScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 20),
+
+              const Text('Phone Number', style: TextStyle(color: Colors.white70, fontSize: 14)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'Enter your phone number',
+                  hintStyle: const TextStyle(color: AppColors.textMuted),
+                  filled: true,
+                  fillColor: AppColors.cardBg,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                ),
+              ),
+              const SizedBox(height: 20),
+
               const Text('Password', style: TextStyle(color: Colors.white70, fontSize: 14)),
               const SizedBox(height: 8),
               TextField(
+                controller: _passwordController,
                 obscureText: true,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
@@ -66,7 +115,7 @@ class RegisterScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 32),
-              // NÚT ĐĂNG KÝ
+
               SizedBox(
                 width: double.infinity,
                 height: 54,
@@ -76,15 +125,25 @@ class RegisterScreen extends StatelessWidget {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: () {
-                    // Đăng ký thành công -> Bắn thông báo nhỏ và quay lại trang Login để bắt nhập lại tài khoản
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Registration successful! Please login.')),
-                    );
-                    Navigator.pop(context);
+                    if (_emailController.text.isNotEmpty && _passwordController.text.isNotEmpty) {
+                      // Ghi nhận dữ liệu vừa gõ vào bộ nhớ tạm toàn cục
+                      AppTempStorage.registeredEmail = _emailController.text.trim();
+                      AppTempStorage.registeredPassword = _passwordController.text.trim();
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Đăng ký thành công tài khoản: ${AppTempStorage.registeredEmail}')),
+                      );
+                      Navigator.pop(context);
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(backgroundColor: Colors.orange, content: Text('Vui lòng điền Email và Password')),
+                      );
+                    }
                   },
                   child: const Text('Sign Up', style: TextStyle(color: AppColors.background, fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
+              const SizedBox(height: 20),
             ],
           ),
         ),
