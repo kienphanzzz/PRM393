@@ -1,11 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants.dart';
-
-class AppTempStorage {
-  static String registeredName = '';
-  static String registeredEmail = '';
-  static String registeredPassword = '';
-}
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -27,6 +22,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _nameController.dispose();
     _phoneController.dispose();
     super.dispose();
+  }
+
+  void _registerAccount() async {
+    if (_emailController.text.isNotEmpty && _passwordController.text.isNotEmpty && _nameController.text.isNotEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('db_name', _nameController.text.trim());
+      await prefs.setString('db_email', _emailController.text.trim());
+      await prefs.setString('db_password', _passwordController.text.trim());
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đăng ký thành công! Hãy đăng nhập.')),
+        );
+        Navigator.pop(context, true);
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(backgroundColor: Colors.orange, content: Text('Vui lòng điền đầy đủ thông tin')),
+      );
+    }
   }
 
   @override
@@ -119,22 +134,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     backgroundColor: AppColors.primary,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  onPressed: () {
-                    if (_emailController.text.isNotEmpty && _passwordController.text.isNotEmpty && _nameController.text.isNotEmpty) {
-                      AppTempStorage.registeredName = _nameController.text.trim();
-                      AppTempStorage.registeredEmail = _emailController.text.trim();
-                      AppTempStorage.registeredPassword = _passwordController.text.trim();
-
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Đăng ký thành công tài khoản: ${AppTempStorage.registeredEmail}')),
-                      );
-                      Navigator.pop(context, true);
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(backgroundColor: Colors.orange, content: Text('Vui lòng điền đầy đủ thông tin')),
-                      );
-                    }
-                  },
+                  onPressed: _registerAccount,
                   child: const Text('Sign Up', style: TextStyle(color: AppColors.background, fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),

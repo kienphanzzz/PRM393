@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants.dart';
 import 'register_screen.dart';
 import '../dashboard/dashboard_screen.dart';
@@ -11,31 +12,51 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
+  @override
+  Widget build(BuildContext context) {
+    return const AuthFormView();
+  }
+}
+
+class AuthFormView extends StatefulWidget {
+  const AuthFormView({super.key});
+
+  @override
+  State<AuthFormView> createState() => _AuthFormViewState();
+}
+
+class _AuthFormViewState extends State<AuthFormView> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  void _handleSignIn() {
+  void _handleSignIn() async {
     if (_formKey.currentState!.validate()) {
       String email = _emailController.text.trim();
       String password = _passwordController.text.trim();
 
-      if ((email == 'kienphanzzz@gmail.com' && password == '12345678') ||
-          (email == AppTempStorage.registeredEmail && password == AppTempStorage.registeredPassword && AppTempStorage.registeredEmail.isNotEmpty)) {
+      final prefs = await SharedPreferences.getInstance();
+      String dbEmail = prefs.getString('db_email') ?? 'kienphanzzz@gmail.com';
+      String dbPassword = prefs.getString('db_password') ?? '12345678';
+      String dbName = prefs.getString('db_name') ?? 'Phan Hữu Kiên';
 
-        String loginName = (email == AppTempStorage.registeredEmail) ? AppTempStorage.registeredName : 'User';
-
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => DashboardScreen(userName: loginName)),
-        );
+      if (email == dbEmail && password == dbPassword) {
+        await prefs.setString('user_name', dbName);
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => DashboardScreen(userName: dbName)),
+          );
+        }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            backgroundColor: Colors.redAccent,
-            content: Text('Sai tài khoản hoặc mật khẩu! Vui lòng thử lại.'),
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor: Colors.redAccent,
+              content: Text('Sai tài khoản hoặc mật khẩu! Vui lòng thử lại.'),
+            ),
+          );
+        }
       }
     }
   }
@@ -179,10 +200,18 @@ class _AuthScreenState extends State<AuthScreen> {
                     const Text("Don't have an account? ", style: TextStyle(color: AppColors.textMuted)),
                     GestureDetector(
                       onTap: () async {
+
+                        _formKey.currentState?.reset();
+
+
+                        _emailController.clear();
+                        _passwordController.clear();
+
                         final result = await Navigator.push(
                           context,
                           MaterialPageRoute(builder: (context) => const RegisterScreen()),
                         );
+
                         if (result == true) {
                           setState(() {
                             _formKey.currentState?.reset();
