@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../../core/constants.dart';
 import '../../main.dart';
 import '../../data/models/task_model.dart';
@@ -15,23 +17,61 @@ class PomodoroTimerScreen extends StatefulWidget {
 }
 
 class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
-  String _currentMode = 'Focus';
+  String _currentMode = 'Focus'; 
   int _focusMinutes = 25;
   int _shortMinutes = 5;
   int _longMinutes = 15;
 
   int _secondsRemaining = 25 * 60;
-  Timer? _timer;
   bool _isRunning = false;
 
   int _completedSessions = 0;
   int _totalFocusedMinutes = 0;
-  final bool _isDark = ThemeController.isDark;
+  bool _isDark = ThemeController.isDark;
 
   TaskModel? _selectedTask;
+  StreamSubscription? _updateSubscription;
+  StreamSubscription? _finishedSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _listenToBackgroundService();
+    ThemeController.themeNotifier.addListener(_updateTheme);
+  }
+
+  void _updateTheme() {
+    if (mounted) setState(() => _isDark = ThemeController.isDark);
+  }
+
+  @override
+  void dispose() {
+    _updateSubscription?.cancel();
+    _finishedSubscription?.cancel();
+    ThemeController.themeNotifier.removeListener(_updateTheme);
+    super.dispose();
+  }
+
+  void _listenToBackgroundService() {
+    final service = FlutterBackgroundService();
+    
+    _updateSubscription = service.on('update').listen((event) {
+      if (mounted && _isRunning) {
+        setState(() {
+          _secondsRemaining = event?['seconds'] ?? _secondsRemaining;
+        });
+      }
+    });
+
+    _finishedSubscription = service.on('finished').listen((event) {
+      if (mounted) {
+        _handleSessionFinished();
+      }
+    });
+  }
 
   void _changeMode(String mode) {
-    _timer?.cancel();
+    FlutterBackgroundService().invoke('stop');
     setState(() {
       _isRunning = false;
       _currentMode = mode;
@@ -41,74 +81,72 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
     });
   }
 
-  void _toggleTimer() {
+  void _toggleTimer() async {
+    // Yêu cầu quyền thông báo trên Android 13+ nếu chưa có
+    final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestNotificationsPermission();
+
+    // Nếu chưa chọn task mà bấm chạy ở chế độ Focus thì bắt chọn
     if (_currentMode == 'Focus' && _selectedTask == null && !_isRunning) {
       _showPickTaskDialog();
       return;
     }
 
+    final service = FlutterBackgroundService();
+    
     if (_isRunning) {
-      _timer?.cancel();
-      setState(() {
-        _isRunning = false;
-      });
+      service.invoke('pause');
+      setState(() => _isRunning = false);
     } else {
-      setState(() {
-        _isRunning = true;
-      });
-      _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        if (_secondsRemaining > 0) {
-          setState(() {
-            _secondsRemaining--;
-          });
-        } else {
-          _timer?.cancel();
-          _handleSessionFinished();
+      try {
+        if (!(await service.isRunning())) {
+          await service.startService();
+          // Chờ lâu hơn một chút để hệ thống Android 14 xử lý Foreground Service
+          await Future.delayed(const Duration(milliseconds: 800));
         }
-      });
+
+        service.invoke('start', {
+          'seconds': _secondsRemaining,
+          'taskTitle': _selectedTask?.title ?? 'Tập trung cao độ'
+        });
+
+        setState(() => _isRunning = true);
+      } catch (e) {
+        debugPrint('Lỗi khởi động service: $e');
+      }
     }
   }
 
   void _resetTimer() {
-    _timer?.cancel();
+    FlutterBackgroundService().invoke('stop');
     _changeMode(_currentMode);
   }
 
   void _handleInterruption() {
     if (!_isRunning) return;
-    _timer?.cancel();
-    setState(() {
-      _isRunning = false;
-    });
+    
+    FlutterBackgroundService().invoke('pause');
+    setState(() => _isRunning = false);
 
     int maxSeconds = _getMaxSecondsForMode();
-    int secondsElapsed = maxSeconds - _secondsRemaining;
-    int minutesElapsed = secondsElapsed ~/ 60;
+    int minutesElapsed = (maxSeconds - _secondsRemaining) ~/ 60;
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         backgroundColor: _isDark ? AppColors.cardBg : Colors.white,
-        title: Text('Hành Động Ngắt Ngang Đột Xuất', style: TextStyle(color: _isDark ? Colors.white : Colors.black87, fontWeight: FontWeight.bold)),
-        content: Text('Bạn vừa bị ngắt ngang phiên làm việc. Bạn đã tập trung được $minutesElapsed phút. Bạn có muốn lưu lại kết quả nỗ lực này không?'),
+        title: const Text('⚠️ NGẮT QUÃNG PHIÊN'),
+        content: Text('Bạn đã tập trung được $minutesElapsed phút. Lưu kết quả chứ?'),
         actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _resetTimer();
-            },
-            child: const Text('Hủy bỏ phiên', style: TextStyle(color: Colors.redAccent)),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              if (minutesElapsed > 0) {
-                _logSessionToHistory(minutesElapsed);
-              }
-              _resetTimer();
-            },
-            child: const Text('Lưu kết quả phần cứng', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-          ),
+          TextButton(onPressed: () { Navigator.pop(context); _resetTimer(); }, child: const Text('Hủy')),
+          ElevatedButton(onPressed: () {
+            Navigator.pop(context);
+            if (minutesElapsed > 0) _logSessionToHistory(minutesElapsed);
+            _resetTimer();
+          }, child: const Text('Lưu')),
         ],
       ),
     );
@@ -121,28 +159,24 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
         _completedSessions++;
         _totalFocusedMinutes += _focusMinutes;
         _logSessionToHistory(_focusMinutes);
-        _showFinishedDialog('Focus Session Finished!', 'Tuyệt vời Kiên ơi! Đã hoàn thành trọn vẹn phiên làm việc.');
-        _changeMode('Short');
+        _changeMode('Short'); 
       } else {
-        _showFinishedDialog('Break Time Ended!', 'Hết thời gian nghỉ ngơi, quay lại luồng tập trung thôi nào!');
         _changeMode('Focus');
       }
     });
   }
 
   void _logSessionToHistory(int minutes) {
-    String currentTaskTitle = _selectedTask?.title ?? 'General Focus Session';
+    String title = _selectedTask?.title ?? 'Phiên tập trung';
     DateTime now = DateTime.now();
-
-    FocusHistoryModel newRecord = FocusHistoryModel(
-      id: now.toString(),
-      taskTitle: currentTaskTitle,
+    FocusHistoryModel record = FocusHistoryModel(
+      id: now.millisecondsSinceEpoch.toString(),
+      taskTitle: title,
       durationMinutes: minutes,
       dateStr: DateFormat('E, MMM dd').format(now),
       timeStr: DateFormat('hh:mm a').format(now),
     );
-
-    HistoryStorage.historyList.insert(0, newRecord);
+    HistoryStorage.historyList.insert(0, record);
     HistoryStorage.saveHistoryToDisk();
   }
 
@@ -151,24 +185,21 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: _isDark ? AppColors.cardBg : Colors.white,
-        title: Text('Chọn việc đầu ngày cần làm', style: TextStyle(color: _isDark ? Colors.white : Colors.black87, fontWeight: FontWeight.bold)),
+        title: const Text('🎯 Chọn nhiệm vụ'),
         content: SizedBox(
           width: double.maxFinite,
-          child: TaskStorage.todoTasks.isEmpty
-              ? const Text('Danh sách việc trống. Vui lòng tạo Task trước.', style: TextStyle(color: AppColors.textMuted))
+          child: TaskStorage.todoTasks.where((t) => !t.isCompleted).isEmpty
+              ? const Text('Hãy tạo nhiệm vụ mới ở trang chủ!')
               : ListView.builder(
             shrinkWrap: true,
-            itemCount: TaskStorage.todoTasks.length,
+            itemCount: TaskStorage.todoTasks.where((t) => !t.isCompleted).length,
             itemBuilder: (context, index) {
-              final task = TaskStorage.todoTasks[index];
+              final task = TaskStorage.todoTasks.where((t) => !t.isCompleted).toList()[index];
               return ListTile(
                 title: Text(task.title, style: TextStyle(color: _isDark ? Colors.white : Colors.black87)),
-                subtitle: Text(task.deadline, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-                trailing: const Icon(Icons.play_circle_outline, color: AppColors.primary),
+                subtitle: Text(task.deadline, style: const TextStyle(fontSize: 11)),
                 onTap: () {
-                  setState(() {
-                    _selectedTask = task;
-                  });
+                  setState(() => _selectedTask = task);
                   Navigator.pop(context);
                   _toggleTimer();
                 },
@@ -176,37 +207,15 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
             },
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Đóng', style: TextStyle(color: AppColors.textMuted)),
-          )
-        ],
-      ),
-    );
-  }
-
-  void _showFinishedDialog(String title, String content) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: _isDark ? AppColors.cardBg : Colors.white,
-        title: Text(title, style: TextStyle(color: _isDark ? Colors.white : Colors.black87, fontWeight: FontWeight.bold)),
-        content: Text(content, style: TextStyle(color: _isDark ? Colors.white70 : Colors.black54)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
-          ),
-        ],
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Đóng'))],
       ),
     );
   }
 
   String _getFormattedTime() {
-    int minutes = _secondsRemaining ~/ 60;
-    int seconds = _secondsRemaining % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    int mins = _secondsRemaining ~/ 60;
+    int secs = _secondsRemaining % 60;
+    return '${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
   }
 
   Color _getThemeColor() {
@@ -222,20 +231,11 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
   }
 
   @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     Color textColor = _isDark ? Colors.white : Colors.black87;
     Color cardBg = _isDark ? AppColors.cardBg : Colors.white;
     Color modeColor = _getThemeColor();
-
-    int dailyGoalSessions = 4;
-    double progressPercent = (_completedSessions / dailyGoalSessions) * 100;
-    if (progressPercent > 100) progressPercent = 100;
+    double progress = (_completedSessions / 4) * 100;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -246,185 +246,77 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                IconButton(
-                  icon: Icon(Icons.assignment_turned_in_outlined, color: _selectedTask != null ? AppColors.primary : textColor.withOpacity(0.4)),
-                  onPressed: _isRunning ? null : _showPickTaskDialog,
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.av_timer, color: AppColors.primary, size: 20),
-                    const SizedBox(width: 6),
-                    Text('Focused Flow', style: TextStyle(color: textColor, fontSize: 20, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                IconButton(
-                  icon: Icon(Icons.settings, color: textColor.withOpacity(0.7), size: 22),
-                  onPressed: _isRunning ? null : () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => PomodoroSettingScreen(
-                          currentFocus: _focusMinutes,
-                          currentShort: _shortMinutes,
-                          currentLong: _longMinutes,
-                          onSettingsSaved: (f, s, l) {
-                            setState(() {
-                              _focusMinutes = f;
-                              _shortMinutes = s;
-                              _longMinutes = l;
-                              _changeMode(_currentMode);
-                            });
-                          },
-                        ),
-                      ),
-                    );
-                  },
-                )
+                IconButton(icon: Icon(Icons.task_alt, color: _selectedTask != null ? AppColors.primary : textColor.withOpacity(0.3)), onPressed: _showPickTaskDialog),
+                const Text('FOCUS FLOW', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                IconButton(icon: const Icon(Icons.tune), onPressed: () {}),
               ],
             ),
-
-            GestureDetector(
-              onTap: _isRunning ? null : _showPickTaskDialog,
-              child: Container(
-                margin: const EdgeInsets.only(top: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                decoration: BoxDecoration(color: _selectedTask != null ? AppColors.primary.withOpacity(0.15) : Colors.transparent, borderRadius: BorderRadius.circular(20)),
-                child: Text(
-                  _selectedTask != null ? '🎯 Target: ${_selectedTask!.title}' : '👉 Chạm để chọn việc cần làm đầu ngày',
-                  style: TextStyle(color: _selectedTask != null ? AppColors.primary : AppColors.textMuted, fontSize: 13, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
+            const SizedBox(height: 10),
+            Text(_selectedTask != null ? '🎯 Target: ${_selectedTask!.title}' : 'Chạm để chọn mục tiêu', style: const TextStyle(color: AppColors.primary, fontSize: 13)),
+            const SizedBox(height: 40),
             Container(
-              padding: const EdgeInsets.all(4),
+              padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(color: cardBg, borderRadius: BorderRadius.circular(20)),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildModeTab('Focus', '${_focusMinutes}m Focus', modeColor),
-                  _buildModeTab('Short', '${_shortMinutes}m Short', modeColor),
-                  _buildModeTab('Long', '${_longMinutes}m Long', modeColor),
+                  _buildTab('Focus', modeColor),
+                  _buildTab('Short', modeColor),
+                  _buildTab('Long', modeColor),
                 ],
               ),
             ),
-            const SizedBox(height: 40),
-
-            Center(
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  SizedBox(
-                    width: 220,
-                    height: 220,
-                    child: CircularProgressIndicator(
-                      value: _secondsRemaining / _getMaxSecondsForMode(),
-                      strokeWidth: 5,
-                      valueColor: AlwaysStoppedAnimation<Color>(modeColor),
-                      backgroundColor: cardBg,
-                    ),
-                  ),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _getFormattedTime(),
-                        style: TextStyle(color: textColor, fontSize: 52, fontWeight: FontWeight.bold, letterSpacing: -1),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _currentMode == 'Focus' ? 'Focus Time' : (_currentMode == 'Short' ? 'Short Break' : 'Long Break'),
-                        style: const TextStyle(color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+            const SizedBox(height: 50),
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(width: 240, height: 240, child: CircularProgressIndicator(value: _secondsRemaining / _getMaxSecondsForMode(), strokeWidth: 8, color: modeColor, backgroundColor: cardBg)),
+                Text(_getFormattedTime(), style: TextStyle(color: textColor, fontSize: 60, fontWeight: FontWeight.bold)),
+              ],
             ),
-            const SizedBox(height: 40),
-
+            const SizedBox(height: 60),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                IconButton(
-                  icon: Icon(Icons.refresh, color: textColor.withOpacity(0.6), size: 22),
-                  onPressed: _resetTimer,
-                ),
-                const SizedBox(width: 24),
-                GestureDetector(
-                  onTap: _toggleTimer,
-                  child: CircleAvatar(
-                    radius: 30,
-                    backgroundColor: modeColor.withOpacity(0.2),
-                    child: CircleAvatar(
-                      radius: 24,
-                      backgroundColor: modeColor,
-                      child: Icon(_isRunning ? Icons.pause : Icons.play_arrow, color: AppColors.background, size: 28),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 24),
-                IconButton(
-                  icon: Icon(Icons.do_not_disturb_on_outlined, color: _isRunning ? Colors.orangeAccent : textColor.withOpacity(0.2), size: 24),
-                  onPressed: _isRunning ? _handleInterruption : null,
-                ),
+                IconButton(icon: const Icon(Icons.refresh), onPressed: _resetTimer),
+                const SizedBox(width: 30),
+                GestureDetector(onTap: _toggleTimer, child: CircleAvatar(radius: 35, backgroundColor: modeColor, child: Icon(_isRunning ? Icons.pause : Icons.play_arrow, color: Colors.white, size: 40))),
+                const SizedBox(width: 30),
+                IconButton(icon: const Icon(Icons.stop_circle_outlined), onPressed: _handleInterruption),
               ],
             ),
             const Spacer(),
-
             Container(
-              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 10),
-              decoration: BoxDecoration(
-                color: cardBg.withOpacity(0.4),
-                borderRadius: BorderRadius.circular(20),
-              ),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(color: cardBg, borderRadius: BorderRadius.circular(24)),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildStatColumn('$_completedSessions', 'Sessions', textColor),
-                  _buildStatColumn('${_totalFocusedMinutes}m', 'Focused', textColor),
-                  _buildStatColumn('${progressPercent.toStringAsFixed(0)}%', 'of Goal', textColor),
+                  _buildStat('$_completedSessions', 'Phiên'),
+                  _buildStat('${_totalFocusedMinutes}m', 'Tập trung'),
+                  _buildStat('${progress.toStringAsFixed(0)}%', 'Mục tiêu'),
                 ],
               ),
             ),
-            const SizedBox(height: 6),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildModeTab(String mode, String label, Color activeColor) {
-    bool isSelected = _currentMode == mode;
+  Widget _buildTab(String mode, Color activeColor) {
+    bool sel = _currentMode == mode;
     return GestureDetector(
-      onTap: _isRunning ? null : () => _changeMode(mode),
+      onTap: () => _changeMode(mode),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? activeColor : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? AppColors.background : AppColors.textMuted,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(color: sel ? activeColor : Colors.transparent, borderRadius: BorderRadius.circular(16)),
+        child: Text(mode, style: TextStyle(color: sel ? Colors.white : AppColors.textMuted, fontWeight: FontWeight.bold)),
       ),
     );
   }
 
-  Widget _buildStatColumn(String value, String label, Color textColor) {
-    return Column(
-      children: [
-        Text(value, style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 4),
-        Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-      ],
-    );
+  Widget _buildStat(String val, String lab) {
+    return Column(children: [Text(val, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)), Text(lab, style: const TextStyle(color: AppColors.textMuted, fontSize: 12))]);
   }
 }

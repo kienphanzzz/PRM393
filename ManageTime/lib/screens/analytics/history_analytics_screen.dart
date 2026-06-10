@@ -197,7 +197,7 @@ class _HistoryAnalyticsScreenState extends State<HistoryAnalyticsScreen> {
           width: 14,
           height: 100 * heightFactor,
           decoration: BoxDecoration(
-            color: isToday ? AppColors.primary : AppColors.primary.withOpacity(0.2),
+            color: isToday ? AppColors.primary : AppColors.primary.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(4),
           ),
         ),

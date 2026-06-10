@@ -37,7 +37,6 @@ class _PomodoroSettingScreenState extends State<PomodoroSettingScreen> {
   @override
   Widget build(BuildContext context) {
     Color bg = _isDark ? AppColors.background : Colors.grey.shade100;
-    Color cardBg = _isDark ? AppColors.cardBg : Colors.white;
     Color textColor = _isDark ? Colors.white : Colors.black87;
 
     return Scaffold(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../core/constants.dart';
 import '../../main.dart';
 import '../../data/models/event_model.dart';
@@ -15,190 +16,276 @@ class EventDetailScreen extends StatefulWidget {
 
 class _EventDetailScreenState extends State<EventDetailScreen> {
   final _titleController = TextEditingController();
+  final _descController = TextEditingController();
   final _locationController = TextEditingController();
-  TimeOfDay _selectedTime = const TimeOfDay(hour: 14, minute: 0);
+  
+  DateTime _startDate = DateTime.now();
+  TimeOfDay _startTime = TimeOfDay.now();
+  TimeOfDay _endTime = TimeOfDay.now();
+  
   String _selectedType = 'Meeting';
+  String _selectedSticker = '📅';
+  bool _isAllDay = false;
   int _reminderMinutes = 10;
-  final bool _isDark = ThemeController.isDark;
+  String _repeatInterval = 'None';
+  
+  bool _isDark = ThemeController.isDark;
+
+  final List<String> _stickers = ['📅', '🤝', '💪', '🚨', '🎓', '🎂', '✈️', '💻', '💡', '🔥'];
 
   @override
   void initState() {
     super.initState();
+    ThemeController.themeNotifier.addListener(_updateTheme);
     if (widget.event != null) {
       _titleController.text = widget.event!.title;
+      _descController.text = widget.event!.description;
+      _locationController.text = widget.event!.location;
       _selectedType = widget.event!.type;
-      final parts = widget.event!.timeLocation.split(' - ');
-      if (parts.length >= 2) {
-        _locationController.text = parts.sublist(1).join(' - ');
-      }
+      _selectedSticker = widget.event!.sticker;
+      _isAllDay = widget.event!.isAllDay;
+      _reminderMinutes = widget.event!.reminderMinutes;
+      _repeatInterval = widget.event!.repeatInterval;
+      
+      _startDate = DateFormat('yyyy-MM-dd HH:mm').parse(widget.event!.startTime);
+      _startTime = TimeOfDay.fromDateTime(_startDate);
+      _endTime = TimeOfDay.fromDateTime(DateFormat('yyyy-MM-dd HH:mm').parse(widget.event!.endTime));
     }
+  }
+
+  void _updateTheme() {
+    if (mounted) setState(() => _isDark = ThemeController.isDark);
   }
 
   @override
   void dispose() {
     _titleController.dispose();
+    _descController.dispose();
     _locationController.dispose();
+    ThemeController.themeNotifier.removeListener(_updateTheme);
     super.dispose();
   }
 
-  Future<void> _selectTime(BuildContext context) async {
-    final TimeOfDay? picked = await showTimePicker(
+  Future<void> _selectDate() async {
+    final DateTime? picked = await showDatePicker(
       context: context,
-      initialTime: _selectedTime,
+      initialDate: _startDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
     );
-    if (picked != null && picked != _selectedTime) {
-      setState(() {
-        _selectedTime = picked;
-      });
-    }
+    if (picked != null) setState(() => _startDate = picked);
   }
 
-  void _saveEvent() {
-    if (_titleController.text.trim().isEmpty || _locationController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(backgroundColor: Colors.orange, content: Text('Vui lòng điền đủ thông tin')),
-      );
-      return;
-    }
-
-    final String formattedTime = _selectedTime.format(context);
-    final String timeAndLoc = '$formattedTime - ${_locationController.text.trim()}';
-
-    // Nghiệp vụ kiểm tra trùng khung giờ (Time-conflict Validation)
-    bool isConflict = EventStorage.todayEvents.any((item) =>
-    item.id != widget.event?.id &&
-        item.timeLocation.split(' - ')[0] == formattedTime
+  Future<void> _selectTime(bool isStart) async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: isStart ? _startTime : _endTime,
     );
+    if (picked != null) setState(() => isStart ? _startTime = picked : _endTime = picked);
+  }
 
-    if (isConflict) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: Colors.redAccent,
-          content: Text('⚠️ Khung giờ này bạn đã có một lịch trình khác diễn ra!'),
-        ),
-      );
-      return;
-    }
+  void _saveEvent() async {
+    if (_titleController.text.trim().isEmpty) return;
+
+    final startStr = DateFormat('yyyy-MM-dd').format(_startDate) + 
+                    " ${_startTime.hour.toString().padLeft(2, '0')}:${_startTime.minute.toString().padLeft(2, '0')}";
+    final endStr = DateFormat('yyyy-MM-dd').format(_startDate) + 
+                    " ${_endTime.hour.toString().padLeft(2, '0')}:${_endTime.minute.toString().padLeft(2, '0')}";
 
     if (widget.event == null) {
-      EventStorage.todayEvents.add(
-        EventModel(
-          id: DateTime.now().toString(),
-          title: _titleController.text.trim(),
-          timeLocation: timeAndLoc,
-          type: _selectedType,
-        ),
-      );
+      EventStorage.userEvents.add(EventModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        title: _titleController.text.trim(),
+        description: _descController.text.trim(),
+        startTime: startStr,
+        endTime: endStr,
+        location: _locationController.text.trim(),
+        type: _selectedType,
+        sticker: _selectedSticker,
+        isAllDay: _isAllDay,
+        reminderMinutes: _reminderMinutes,
+        repeatInterval: _repeatInterval,
+      ));
     } else {
       widget.event!.title = _titleController.text.trim();
-      widget.event!.timeLocation = timeAndLoc;
+      widget.event!.description = _descController.text.trim();
+      widget.event!.startTime = startStr;
+      widget.event!.endTime = endStr;
+      widget.event!.location = _locationController.text.trim();
       widget.event!.type = _selectedType;
+      widget.event!.sticker = _selectedSticker;
+      widget.event!.isAllDay = _isAllDay;
+      widget.event!.reminderMinutes = _reminderMinutes;
+      widget.event!.repeatInterval = _repeatInterval;
     }
 
+    await EventStorage.saveEvents();
     widget.onEventUpdated();
-    Navigator.pop(context);
+    if (mounted) Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
-    Color bg = _isDark ? AppColors.background : Colors.grey.shade100;
-    Color cardBg = _isDark ? AppColors.cardBg : Colors.white;
     Color textColor = _isDark ? Colors.white : Colors.black87;
-    bool isEditMode = widget.event != null;
+    Color cardBg = _isDark ? AppColors.cardBg : Colors.white;
 
     return Scaffold(
-      backgroundColor: bg,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              IconButton(icon: Icon(Icons.arrow_back, color: textColor), onPressed: () => Navigator.pop(context)),
-              const SizedBox(height: 10),
-              Text(isEditMode ? 'Edit Event Schedule' : 'Create New Event', style: TextStyle(color: textColor, fontSize: 26, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 24),
-              Text('Event Title', style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.w500)),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _titleController,
-                style: TextStyle(color: textColor),
-                decoration: InputDecoration(
-                  hintText: 'E.g., Họp tiến độ đồ án',
-                  hintStyle: const TextStyle(color: AppColors.textMuted),
-                  filled: true,
-                  fillColor: cardBg,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+      backgroundColor: _isDark ? AppColors.background : const Color(0xFFF8F9FA),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(icon: Icon(Icons.arrow_back, color: textColor), onPressed: () => Navigator.pop(context)),
+        title: Text(widget.event == null ? 'Thêm sự kiện' : 'Chi tiết sự kiện', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildLabel('Tiêu đề & Sticker', textColor),
+            Row(
+              children: [
+                DropdownButton<String>(
+                  value: _selectedSticker,
+                  dropdownColor: cardBg,
+                  underline: Container(),
+                  items: _stickers.map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 24)))).toList(),
+                  onChanged: (val) => setState(() => _selectedSticker = val!),
                 ),
-              ),
-              const SizedBox(height: 20),
+                const SizedBox(width: 12),
+                Expanded(child: _buildTextField(_titleController, 'Tên sự kiện...', cardBg, textColor)),
+              ],
+            ),
+            const SizedBox(height: 20),
+            
+            _buildLabel('Mô tả', textColor),
+            _buildTextField(_descController, 'Chi tiết thêm...', cardBg, textColor, maxLines: 2),
+            const SizedBox(height: 20),
+
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildLabel('Ngày', textColor),
+                      GestureDetector(onTap: _selectDate, child: _buildDateBox(DateFormat('dd/MM/yyyy').format(_startDate), cardBg, textColor)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                _buildAllDaySwitch(textColor),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            if (!_isAllDay)
               Row(
                 children: [
-                  Expanded(
-                    flex: 4,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Pick Time', style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.w500)),
-                        const SizedBox(height: 8),
-                        InkWell(
-                          onTap: () => _selectTime(context),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-                            decoration: BoxDecoration(color: cardBg, borderRadius: BorderRadius.circular(12)),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(_selectedTime.format(context), style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
-                                const Icon(Icons.access_time, color: AppColors.primary, size: 18),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  Expanded(child: _buildTimePickerCol('Bắt đầu', _startTime, true, textColor, cardBg)),
                   const SizedBox(width: 16),
-                  Expanded(
-                    flex: 6,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Location', style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.w500)),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _locationController,
-                          style: TextStyle(color: textColor),
-                          decoration: InputDecoration(
-                            hintText: 'E.g., Hall Alpha',
-                            hintStyle: const TextStyle(color: AppColors.textMuted),
-                            filled: true,
-                            fillColor: cardBg,
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  Expanded(child: _buildTimePickerCol('Kết thúc', _endTime, false, textColor, cardBg)),
                 ],
               ),
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  onPressed: _saveEvent,
-                  child: Text(isEditMode ? 'Update Event Schedule' : 'Set Schedule Reminder', style: const TextStyle(color: AppColors.background, fontSize: 16, fontWeight: FontWeight.bold)),
-                ),
+            const SizedBox(height: 20),
+
+            _buildLabel('Vị trí', textColor),
+            _buildTextField(_locationController, 'Địa điểm hoặc Link meeting', cardBg, textColor, icon: Icons.location_on_outlined),
+            const SizedBox(height: 20),
+
+            Row(
+              children: [
+                Expanded(child: _buildDropdownCol('Nhắc trước', '$_reminderMinutes phút', [5, 10, 15, 30, 60], (v) => setState(() => _reminderMinutes = v as int), textColor, cardBg)),
+                const SizedBox(width: 16),
+                Expanded(child: _buildDropdownCol('Lặp lại', _repeatInterval, ['None', 'Daily', 'Weekly', 'Monthly'], (v) => setState(() => _repeatInterval = v as String), textColor, cardBg)),
+              ],
+            ),
+            const SizedBox(height: 40),
+            
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                onPressed: _saveEvent,
+                child: const Text('LƯU SỰ KIỆN', style: TextStyle(color: AppColors.background, fontWeight: FontWeight.bold)),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildLabel(String text, Color color) {
+    return Padding(padding: const EdgeInsets.only(left: 4, bottom: 8), child: Text(text, style: TextStyle(color: color.withOpacity(0.6), fontSize: 13, fontWeight: FontWeight.bold)));
+  }
+
+  Widget _buildTextField(TextEditingController ctrl, String hint, Color bg, Color txt, {int maxLines = 1, IconData? icon}) {
+    return Container(
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(16)),
+      child: TextField(
+        controller: ctrl, maxLines: maxLines, style: TextStyle(color: txt),
+        decoration: InputDecoration(
+          hintText: hint, prefixIcon: icon != null ? Icon(icon, color: AppColors.textMuted) : null,
+          border: InputBorder.none, contentPadding: const EdgeInsets.all(16),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDateBox(String date, Color bg, Color txt) {
+    return Container(
+      width: double.infinity, padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(16)),
+      child: Text(date, style: TextStyle(color: txt, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  Widget _buildAllDaySwitch(Color txt) {
+    return Column(
+      children: [
+        Text('Cả ngày', style: TextStyle(color: txt.withOpacity(0.6), fontSize: 13, fontWeight: FontWeight.bold)),
+        Switch(value: _isAllDay, activeColor: AppColors.primary, onChanged: (v) => setState(() => _isAllDay = v)),
+      ],
+    );
+  }
+
+  Widget _buildTimePickerCol(String label, TimeOfDay time, bool isStart, Color txt, Color bg) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel(label, txt),
+        GestureDetector(
+          onTap: () => _selectTime(isStart),
+          child: Container(
+            width: double.infinity, padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(16)),
+            child: Text(time.format(context), style: TextStyle(color: txt, fontWeight: FontWeight.bold)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDropdownCol(String label, String value, List items, ValueChanged onChanged, Color txt, Color bg) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel(label, txt),
+        Container(
+          width: double.infinity, padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(16)),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton(
+              value: items.contains(int.tryParse(value.split(' ')[0])) ? int.tryParse(value.split(' ')[0]) : (items.contains(value) ? value : items[0]),
+              dropdownColor: bg, icon: const Icon(Icons.arrow_drop_down),
+              items: items.map((i) => DropdownMenuItem(value: i, child: Text(i is int ? '$i phút' : i.toString(), style: TextStyle(color: txt)))).toList(),
+              onChanged: onChanged,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

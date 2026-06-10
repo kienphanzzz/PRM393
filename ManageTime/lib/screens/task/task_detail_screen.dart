@@ -5,185 +5,229 @@ import '../../data/models/task_model.dart';
 
 class TaskDetailScreen extends StatefulWidget {
   final TaskModel? task;
-  final VoidCallback onTaskUpdated;
+  final bool isNewTask;
 
-  const TaskDetailScreen({super.key, this.task, required this.onTaskUpdated});
+  const TaskDetailScreen({super.key, this.task, this.isNewTask = false});
 
   @override
   State<TaskDetailScreen> createState() => _TaskDetailScreenState();
 }
 
 class _TaskDetailScreenState extends State<TaskDetailScreen> {
-  final _titleController = TextEditingController();
-  final _deadlineController = TextEditingController();
-  String _selectedPriority = 'Medium';
-  final bool _isDark = ThemeController.isDark;
+  late TextEditingController _titleController;
+  late TextEditingController _descController;
+  late TextEditingController _dateController;
+  String _priority = 'Medium';
+  bool _isDark = ThemeController.isDark;
 
   @override
   void initState() {
     super.initState();
-    if (widget.task != null) {
-      _titleController.text = widget.task!.title;
-      _deadlineController.text = widget.task!.deadline;
-      _selectedPriority = widget.task!.priority;
-    }
+    _titleController = TextEditingController(text: widget.task?.title ?? '');
+    _descController = TextEditingController(text: widget.task?.description ?? '');
+    _dateController = TextEditingController(text: widget.task?.deadline ?? '');
+    _priority = widget.task?.priority ?? 'Medium';
+    ThemeController.themeNotifier.addListener(_updateTheme);
+  }
+
+  void _updateTheme() {
+    if (mounted) setState(() => _isDark = ThemeController.isDark);
   }
 
   @override
   void dispose() {
     _titleController.dispose();
-    _deadlineController.dispose();
+    _descController.dispose();
+    _dateController.dispose();
+    ThemeController.themeNotifier.removeListener(_updateTheme);
     super.dispose();
   }
 
-  void _saveTask() {
-    if (_titleController.text.trim().isEmpty || _deadlineController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(backgroundColor: Colors.orange, content: Text('Please fill all info')),
-      );
-      return;
-    }
+  void _saveTask() async {
+    if (_titleController.text.trim().isEmpty) return;
 
-    if (widget.task == null) {
-      TaskStorage.todoTasks.add(
-        TaskModel(
-          id: DateTime.now().toString(),
-          title: _titleController.text.trim(),
-          deadline: _deadlineController.text.trim(),
-          priority: _selectedPriority,
-        ),
+    if (widget.isNewTask) {
+      final newTask = TaskModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        title: _titleController.text.trim(),
+        description: _descController.text.trim(),
+        deadline: _dateController.text.trim(),
+        priority: _priority,
       );
-    } else {
+      TaskStorage.todoTasks.add(newTask);
+    } else if (widget.task != null) {
       widget.task!.title = _titleController.text.trim();
-      widget.task!.deadline = _deadlineController.text.trim();
-      widget.task!.priority = _selectedPriority;
+      widget.task!.description = _descController.text.trim();
+      widget.task!.deadline = _dateController.text.trim();
+      widget.task!.priority = _priority;
     }
 
-    widget.onTaskUpdated();
-    Navigator.pop(context);
+    await TaskStorage.saveTasks();
+    if (mounted) Navigator.pop(context, true);
   }
 
-  void _deleteTask() {
+  void _deleteTask() async {
     if (widget.task != null) {
-      TaskStorage.todoTasks.removeWhere((item) => item.id == widget.task!.id);
-      widget.onTaskUpdated();
-      Navigator.pop(context);
+      TaskStorage.todoTasks.removeWhere((t) => t.id == widget.task!.id);
+      await TaskStorage.saveTasks();
+      if (mounted) Navigator.pop(context, true);
+    }
+  }
+
+  Future<void> _selectDateTime() async {
+    DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime.now(),
+      lastDate: DateTime(2030),
+    );
+
+    if (pickedDate != null && mounted) {
+      TimeOfDay? pickedTime = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.now(),
+      );
+
+      if (pickedTime != null) {
+        setState(() {
+          final formattedDate = "${pickedDate.year}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}";
+          final formattedTime = "${pickedTime.hour.toString().padLeft(2, '0')}:${pickedTime.minute.toString().padLeft(2, '0')}";
+          _dateController.text = "$formattedDate $formattedTime";
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    Color bg = _isDark ? AppColors.background : Colors.grey.shade100;
-    Color cardBg = _isDark ? AppColors.cardBg : Colors.white;
     Color textColor = _isDark ? Colors.white : Colors.black87;
-    bool isEditMode = widget.task != null;
+    Color cardBg = _isDark ? AppColors.cardBg : Colors.white;
 
     return Scaffold(
-      backgroundColor: bg,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  IconButton(
-                    icon: Icon(Icons.arrow_back, color: textColor),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                  if (isEditMode)
-                    IconButton(
-                      icon: const Icon(Icons.delete_forever, color: Colors.redAccent, size: 28),
-                      onPressed: _deleteTask,
-                    ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                isEditMode ? 'Task Details & Action' : 'Add New Task',
-                style: TextStyle(color: textColor, fontSize: 26, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 30),
-              Text('Task Title Name', style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.w500)),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _titleController,
-                style: TextStyle(color: textColor),
-                decoration: InputDecoration(
-                  hintText: 'E.g., Read advanced flutter tech book',
-                  hintStyle: const TextStyle(color: AppColors.textMuted),
-                  filled: true,
-                  fillColor: cardBg,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text('Set Deadline Target', style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.w500)),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _deadlineController,
-                style: TextStyle(color: textColor),
-                decoration: InputDecoration(
-                  hintText: 'E.g., Due tomorrow at 5:00 PM',
-                  hintStyle: const TextStyle(color: AppColors.textMuted),
-                  filled: true,
-                  fillColor: cardBg,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text('Set Priority Level', style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.w500)),
-              const SizedBox(height: 12),
-              Row(
-                children: ['Low', 'Medium', 'High'].map((p) {
-                  bool isSelected = _selectedPriority == p;
-                  return Expanded(
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _selectedPriority = p;
-                        });
-                      },
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        decoration: BoxDecoration(
-                          color: isSelected ? AppColors.primary : cardBg,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          p,
-                          style: TextStyle(
-                            color: isSelected ? AppColors.background : textColor,
-                            fontWeight: FontWeight.bold,
-                          ),
+      backgroundColor: _isDark ? AppColors.background : const Color(0xFFF8F9FA),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: textColor),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          widget.isNewTask ? 'Thêm nhiệm vụ' : 'Chi tiết nhiệm vụ',
+          style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          if (!widget.isNewTask)
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+              onPressed: _deleteTask,
+            )
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildLabel('Tên nhiệm vụ', textColor),
+            _buildTextField(_titleController, 'Nhập tên nhiệm vụ...', cardBg, textColor),
+            const SizedBox(height: 20),
+            
+            _buildLabel('Mô tả', textColor),
+            _buildTextField(_descController, 'Thêm chi tiết...', cardBg, textColor, maxLines: 3),
+            const SizedBox(height: 20),
+
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildLabel('Hạn chót', textColor),
+                      GestureDetector(
+                        onTap: _selectDateTime,
+                        child: AbsorbPointer(
+                          child: _buildTextField(_dateController, 'Chọn ngày & giờ', cardBg, textColor),
                         ),
                       ),
-                    ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 40),
-              SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  onPressed: _saveTask,
-                  child: Text(
-                    isEditMode ? 'Save & Update Details' : 'Create Task Now',
-                    style: const TextStyle(color: AppColors.background, fontSize: 16, fontWeight: FontWeight.bold),
+                    ],
                   ),
                 ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildLabel('Ưu tiên', textColor),
+                      _buildPriorityDropdown(cardBg, textColor),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 40),
+            
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                onPressed: _saveTask,
+                child: Text(
+                  widget.isNewTask ? 'Tạo mới' : 'Cập nhật',
+                  style: const TextStyle(color: AppColors.background, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
               ),
-            ],
-          ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLabel(String text, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 8),
+      child: Text(text, style: TextStyle(color: color.withValues(alpha: 0.6), fontSize: 13, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  Widget _buildTextField(TextEditingController controller, String hint, Color bg, Color txt, {int maxLines = 1}) {
+    return Container(
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(16)),
+      child: TextField(
+        controller: controller,
+        maxLines: maxLines,
+        style: TextStyle(color: txt),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: TextStyle(color: AppColors.textMuted.withValues(alpha: 0.5)),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+          contentPadding: const EdgeInsets.all(16),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPriorityDropdown(Color bg, Color txt) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(16)),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _priority,
+          dropdownColor: bg,
+          icon: const Icon(Icons.keyboard_arrow_down, color: AppColors.textMuted),
+          items: ['High', 'Medium', 'Low'].map((String value) {
+            return DropdownMenuItem<String>(
+              value: value,
+              child: Text(value, style: TextStyle(color: txt)),
+            );
+          }).toList(),
+          onChanged: (val) => setState(() => _priority = val!),
         ),
       ),
     );
