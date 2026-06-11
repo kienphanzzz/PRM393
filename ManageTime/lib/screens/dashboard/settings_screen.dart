@@ -1,8 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:manage_time/core/constants.dart';
-import 'package:manage_time/main.dart';
-import 'package:manage_time/screens/auth/auth_screen.dart';
+import '../../core/constants.dart';
+import '../../main.dart';
+import '../auth/auth_screen.dart';
+import '../../data/models/session_model.dart';
+import '../../data/models/achievement_model.dart';
+import 'achievements_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final String userName;
@@ -14,11 +18,10 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _isDarkTheme = ThemeController.isDark;
-  late TextEditingController _nameController;
-  late TextEditingController _emailController;
-  String _profileImagePath = ''; // Mock path for avatar index or asset
+  String _displayName = 'User';
+  String _userEmail = 'user@gmail.com';
+  String _profileImageIdx = '0';
 
-  // Pomodoro Settings
   int _focusTime = 25;
   int _shortBreak = 5;
   int _longBreak = 15;
@@ -26,17 +29,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.userName);
-    _emailController = TextEditingController();
     _loadUserData();
+    ThemeController.themeNotifier.addListener(_updateTheme);
+  }
+
+  void _updateTheme() {
+    if (mounted) setState(() => _isDarkTheme = ThemeController.isDark);
   }
 
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
+    String email = prefs.getString('user_email') ?? 'user@gmail.com';
     setState(() {
-      _nameController.text = prefs.getString('user_name') ?? widget.userName;
-      _emailController.text = prefs.getString('user_email') ?? 'kienphanzzz@gmail.com';
-      _profileImagePath = prefs.getString('profile_image') ?? '0'; // index of mock avatar
+      _userEmail = email;
+      _displayName = prefs.getString('user_name') ?? widget.userName;
+      _profileImageIdx = prefs.getString('profile_image_$email') ?? '0';
       _focusTime = prefs.getInt('pomo_focus') ?? 25;
       _shortBreak = prefs.getInt('pomo_short') ?? 5;
       _longBreak = prefs.getInt('pomo_long') ?? 15;
@@ -45,69 +52,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
+    ThemeController.themeNotifier.removeListener(_updateTheme);
     super.dispose();
   }
 
   void _showEditProfileDialog() {
-    final tempNameController = TextEditingController(text: _nameController.text);
-    final tempEmailController = TextEditingController(text: _emailController.text);
-
+    final nameCtrl = TextEditingController(text: _displayName);
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppColors.cardBg,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text('Cập nhật thông tin', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: tempNameController,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Họ và tên',
-                  labelStyle: TextStyle(color: AppColors.textMuted),
-                  enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: tempEmailController,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  labelStyle: TextStyle(color: AppColors.textMuted),
-                  enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Hủy', style: TextStyle(color: AppColors.textMuted)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-              onPressed: () async {
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.setString('user_name', tempNameController.text.trim());
-                await prefs.setString('user_email', tempEmailController.text.trim());
-                setState(() {
-                  _nameController.text = tempNameController.text.trim();
-                  _emailController.text = tempEmailController.text.trim();
-                });
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã cập nhật thông tin thành công!')));
-              },
-              child: const Text('Lưu', style: TextStyle(color: AppColors.background, fontWeight: FontWeight.bold)),
-            ),
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.cardBg,
+        title: const Text('Đổi tên hiển thị', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: nameCtrl,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(labelText: 'Tên mới'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Hủy')),
+          ElevatedButton(
+            onPressed: () async {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setString('user_name', nameCtrl.text.trim());
+              setState(() => _displayName = nameCtrl.text.trim());
+              Navigator.pop(context);
+            },
+            child: const Text('Lưu'),
+          )
+        ],
+      ),
+    );
+  }
+
+  void _showChangePasswordDialog() {
+    final oldPassCtrl = TextEditingController();
+    final newPassCtrl = TextEditingController();
+    final confirmPassCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.cardBg,
+        title: const Text('Đổi mật khẩu', style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: oldPassCtrl, obscureText: true, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'Mật khẩu cũ')),
+            TextField(controller: newPassCtrl, obscureText: true, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'Mật khẩu mới')),
+            TextField(controller: confirmPassCtrl, obscureText: true, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'Xác nhận mật khẩu mới')),
           ],
-        );
-      },
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Hủy')),
+          ElevatedButton(
+            onPressed: () async {
+              if (newPassCtrl.text != confirmPassCtrl.text) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mật khẩu xác nhận không khớp!')));
+                return;
+              }
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setString('saved_password', newPassCtrl.text);
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã đổi mật khẩu thành công!')));
+            },
+            child: const Text('Cập nhật'),
+          )
+        ],
+      ),
     );
   }
 
@@ -116,65 +126,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       backgroundColor: AppColors.cardBg,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Chọn ảnh đại diện', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 20),
-              SizedBox(
-                height: 100,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: 5,
-                  itemBuilder: (context, index) {
-                    return GestureDetector(
-                      onTap: () async {
-                        final prefs = await SharedPreferences.getInstance();
-                        await prefs.setString('profile_image', index.toString());
-                        setState(() {
-                          _profileImagePath = index.toString();
-                        });
-                        Navigator.pop(context);
-                      },
-                      child: Container(
-                        margin: const EdgeInsets.only(right: 15),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: _profileImagePath == index.toString() ? AppColors.primary : Colors.transparent,
-                            width: 3,
-                          ),
-                        ),
-                        child: CircleAvatar(
-                          radius: 40,
-                          backgroundColor: Colors.grey.withValues(alpha: 0.2),
-                          child: Icon(_getIconForIndex(index), size: 40, color: Colors.white),
-                        ),
-                      ),
-                    );
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Chọn ảnh đại diện', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
+            SizedBox(
+              height: 100,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: 5,
+                itemBuilder: (context, index) => GestureDetector(
+                  onTap: () async {
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setString('profile_image_$_userEmail', index.toString());
+                    setState(() => _profileImageIdx = index.toString());
+                    Navigator.pop(context);
                   },
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 15),
+                    decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: _profileImageIdx == index.toString() ? AppColors.primary : Colors.transparent, width: 3)),
+                    child: CircleAvatar(radius: 40, child: Icon(_getIcon(index.toString()), size: 40)),
+                  ),
                 ),
               ),
-              const SizedBox(height: 20),
-              const Text('(Cần cài thêm image_picker để tải ảnh từ máy)', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
-            ],
-          ),
-        );
-      },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
-  IconData _getIconForIndex(int index) {
-    switch (index) {
-      case 1: return Icons.face_retouching_natural;
-      case 2: return Icons.face_unlock_rounded;
-      case 3: return Icons.face_6_rounded;
-      case 4: return Icons.face_3_rounded;
-      default: return Icons.person;
-    }
+  IconData _getIcon(String idx) {
+    if (idx == '1') return Icons.face_retouching_natural;
+    if (idx == '2') return Icons.face_6;
+    if (idx == '3') return Icons.face_3;
+    if (idx == '4') return Icons.face_2;
+    return Icons.person;
   }
 
   void _showPomoSettings() {
@@ -191,9 +181,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildPomoSlider('Tập trung', tempFocus, 10, 60, (val) => setDialogState(() => tempFocus = val.toInt())),
-              _buildPomoSlider('Nghỉ ngắn', tempShort, 1, 15, (val) => setDialogState(() => tempShort = val.toInt())),
-              _buildPomoSlider('Nghỉ dài', tempLong, 5, 30, (val) => setDialogState(() => tempLong = val.toInt())),
+              _buildPomoSlider('Tập trung', tempFocus, 10, 60, (v) => setDialogState(() => tempFocus = v.toInt())),
+              _buildPomoSlider('Nghỉ ngắn', tempShort, 1, 15, (v) => setDialogState(() => tempShort = v.toInt())),
+              _buildPomoSlider('Nghỉ dài', tempLong, 5, 30, (v) => setDialogState(() => tempLong = v.toInt())),
             ],
           ),
           actions: [
@@ -230,21 +220,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Text('$value phút', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
           ],
         ),
-        Slider(
-          value: value.toDouble(),
-          min: min,
-          max: max,
-          activeColor: AppColors.primary,
-          onChanged: onChanged,
-        ),
+        Slider(value: value.toDouble(), min: min, max: max, activeColor: AppColors.primary, onChanged: onChanged),
       ],
     );
   }
 
+  void _handleLogout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_logged_in', false);
+    if (mounted) {
+       Navigator.pushAndRemoveUntil(
+         context,
+         MaterialPageRoute(builder: (context) => const AuthScreen()),
+         (route) => false
+       );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    Color currentTextColor = Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87;
-    Color cardBg = Theme.of(context).brightness == Brightness.dark ? AppColors.cardBg : Colors.white;
+    int streak = HistoryStorage.calculateStreak();
+    int totalMins = HistoryStorage.historyList.fold(0, (sum, item) => sum + item.durationMinutes);
+    AchievementProvider.checkAchievements(totalMins, streak);
+
+    Color textColor = _isDarkTheme ? Colors.white : Colors.black87;
+    Color cardBg = _isDarkTheme ? AppColors.cardBg : Colors.white;
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -252,7 +252,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Settings & Profile', style: TextStyle(color: currentTextColor, fontSize: 28, fontWeight: FontWeight.bold)),
+            Text('Settings & Profile', style: TextStyle(color: textColor, fontSize: 28, fontWeight: FontWeight.bold)),
             const SizedBox(height: 30),
             Center(
               child: Column(
@@ -261,75 +261,108 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onTap: _showAvatarPicker,
                     child: Stack(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: AppColors.primary, width: 2)),
-                          child: CircleAvatar(
-                            radius: 50,
-                            backgroundColor: cardBg,
-                            child: Icon(_getIconForIndex(int.tryParse(_profileImagePath) ?? 0), size: 50, color: currentTextColor),
-                          ),
-                        ),
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-                            child: const Icon(Icons.camera_alt, size: 18, color: AppColors.background),
-                          ),
-                        ),
+                        CircleAvatar(radius: 50, backgroundColor: cardBg, child: Icon(_getIcon(_profileImageIdx), size: 50, color: textColor)),
+                        Positioned(bottom: 0, right: 0, child: Container(padding: const EdgeInsets.all(6), decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle), child: const Icon(Icons.camera_alt, size: 14, color: AppColors.background))),
                       ],
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Text(_nameController.text, style: TextStyle(color: currentTextColor, fontSize: 22, fontWeight: FontWeight.bold)),
-                  Text(_emailController.text, style: const TextStyle(color: AppColors.textMuted, fontSize: 14)),
+                  Text(_displayName, style: TextStyle(color: textColor, fontSize: 22, fontWeight: FontWeight.bold)),
+                  Text(_userEmail, style: const TextStyle(color: AppColors.textMuted)),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    decoration: BoxDecoration(color: Colors.orange.withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.local_fire_department, color: Colors.orange, size: 18),
+                        const SizedBox(width: 4),
+                        Text('$streak Days Streak', style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
+
             const SizedBox(height: 40),
-            _buildSectionHeader('GIAO DIỆN'),
+            _buildSection('HUY HIỆU VINH DANH'),
             Container(
-              margin: const EdgeInsets.only(bottom: 16, top: 8),
-              decoration: BoxDecoration(color: cardBg, borderRadius: BorderRadius.circular(20), boxShadow: [if(Theme.of(context).brightness == Brightness.light) BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)]),
-              child: ListTile(
-                leading: const Icon(Icons.color_lens_outlined, color: AppColors.primary),
-                title: Text('Chế độ tối (Dark Mode)', style: TextStyle(color: currentTextColor, fontWeight: FontWeight.bold)),
-                trailing: Switch(
-                  activeThumbColor: AppColors.primary,
-                  value: _isDarkTheme,
-                  onChanged: (value) async {
-                    final prefs = await SharedPreferences.getInstance();
-                    await prefs.setBool('is_dark_theme', value);
-                    setState(() => _isDarkTheme = value);
-                    ThemeController.toggleTheme(value);
-                  },
-                ),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(color: cardBg, borderRadius: BorderRadius.circular(20)),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: AchievementProvider.getFeatured().isEmpty
+                      ? [const Text('Chưa đạt huy hiệu nào', style: TextStyle(color: AppColors.textMuted, fontSize: 12))]
+                      : AchievementProvider.getFeatured().map((a) => Column(
+                          children: [
+                            Text(a.emoji, style: const TextStyle(fontSize: 40)),
+                            const SizedBox(height: 4),
+                            Text(a.title, style: TextStyle(color: textColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                          ],
+                        )).toList(),
+                  ),
+                  const Divider(height: 30),
+                  TextButton(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AchievementsScreen())),
+                    child: const Text('Xem toàn bộ kho huy hiệu →', style: TextStyle(color: AppColors.primary)),
+                  ),
+                ],
               ),
             ),
-            _buildSectionHeader('CÁ NHÂN HÓA'),
-            _buildSettingItem(Icons.edit_outlined, 'Cập nhật thông tin', 'Đổi tên và email hiển thị', cardBg, currentTextColor, _showEditProfileDialog),
-            _buildSettingItem(Icons.lock_clock_outlined, 'Cài đặt Pomodoro', 'Tùy chỉnh thời gian tập trung: $_focusTime phút', cardBg, currentTextColor, _showPomoSettings),
-            
+
+            const SizedBox(height: 32),
+            _buildSection('GIAO DIỆN & CÀI ĐẶT'),
+            Container(
+              decoration: BoxDecoration(color: cardBg, borderRadius: BorderRadius.circular(16)),
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.dark_mode, color: AppColors.primary),
+                    title: Text('Chế độ tối', style: TextStyle(color: textColor)),
+                    trailing: Switch(
+                      value: _isDarkTheme,
+                      onChanged: (v) async {
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.setBool('is_dark_theme', v);
+                        ThemeController.toggleTheme(v);
+                      },
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.timer, color: AppColors.primary),
+                    title: Text('Thời gian Pomodoro', style: TextStyle(color: textColor)),
+                    subtitle: Text('$_focusTime - $_shortBreak - $_longBreak', style: const TextStyle(fontSize: 12)),
+                    onTap: _showPomoSettings,
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.person_outline, color: AppColors.primary),
+                    title: Text('Cập nhật thông tin', style: TextStyle(color: textColor)),
+                    onTap: _showEditProfileDialog,
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.lock_outline, color: AppColors.primary),
+                    title: Text('Đổi mật khẩu', style: TextStyle(color: textColor)),
+                    onTap: _showChangePasswordDialog,
+                  ),
+                ],
+              ),
+            ),
+
             const SizedBox(height: 40),
             SizedBox(
               width: double.infinity,
-              height: 54,
               child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.redAccent, width: 1.5),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-                onPressed: () async {
-                  final prefs = await SharedPreferences.getInstance();
-                  await prefs.clear();
-                  if (context.mounted) {
-                    Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const AuthScreen()), (route) => false);
-                  }
-                },
-                icon: const Icon(Icons.logout, color: Colors.redAccent),
-                label: const Text('Đăng xuất tài khoản', style: TextStyle(color: Colors.redAccent, fontSize: 16, fontWeight: FontWeight.bold)),
+                onPressed: _handleLogout,
+                style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                icon: const Icon(Icons.logout, color: Colors.red),
+                label: const Text('Đăng xuất', style: TextStyle(color: Colors.red)),
               ),
             ),
           ],
@@ -338,25 +371,5 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 8),
-      child: Text(title, style: const TextStyle(color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
-    );
-  }
-
-  Widget _buildSettingItem(IconData icon, String title, String subtitle, Color cardBg, Color textColor, VoidCallback onTap) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(color: cardBg, borderRadius: BorderRadius.circular(20), boxShadow: [if(Theme.of(context).brightness == Brightness.light) BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)]),
-      child: ListTile(
-        onTap: onTap,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        leading: Icon(icon, color: AppColors.primary),
-        title: Text(title, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 15)),
-        subtitle: Text(subtitle, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-        trailing: const Icon(Icons.chevron_right, color: AppColors.textMuted),
-      ),
-    );
-  }
+  Widget _buildSection(String title) => Padding(padding: const EdgeInsets.only(bottom: 8, left: 4), child: Text(title, style: const TextStyle(fontSize: 12, color: AppColors.textMuted, fontWeight: FontWeight.bold, letterSpacing: 1)));
 }

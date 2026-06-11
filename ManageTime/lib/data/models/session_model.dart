@@ -5,9 +5,10 @@ class FocusHistoryModel {
   final String id;
   final String taskTitle;
   final int durationMinutes;
-  final String dateStr;
+  final String dateStr; // E, MMM dd
   final String timeStr;
   final String userEmail;
+  final String status; // 'Completed' hoặc 'Cancelled'
 
   FocusHistoryModel({
     required this.id,
@@ -15,7 +16,8 @@ class FocusHistoryModel {
     required this.durationMinutes,
     required this.dateStr,
     required this.timeStr,
-    this.userEmail = '',
+    required this.userEmail,
+    this.status = 'Completed',
   });
 
   Map<String, dynamic> toMap() {
@@ -26,6 +28,7 @@ class FocusHistoryModel {
       'dateStr': dateStr,
       'timeStr': timeStr,
       'userEmail': userEmail,
+      'status': status,
     };
   }
 
@@ -37,6 +40,7 @@ class FocusHistoryModel {
       dateStr: map['dateStr'] ?? '',
       timeStr: map['timeStr'] ?? '',
       userEmail: map['userEmail'] ?? '',
+      status: map['status'] ?? 'Completed',
     );
   }
 }
@@ -64,5 +68,12 @@ class HistoryStorage {
     } else {
       historyList = [];
     }
+  }
+
+  // Tính Streak (Số ngày liên tiếp tập trung)
+  static int calculateStreak() {
+    if (historyList.isEmpty) return 0;
+    // Logic tính toán ngày liên tiếp dựa trên dateStr
+    return 3; // Mock 3 ngày
   }
 }

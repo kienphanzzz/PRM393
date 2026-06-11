@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:manage_time/core/constants.dart';
 import 'package:manage_time/main.dart';
 import 'package:manage_time/data/models/task_model.dart';
@@ -24,9 +25,10 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  int _currentIndex = 2; // Default to Home (Tasks)
+  int _currentIndex = 2; // Default to Home
   String _currentUserName = 'User';
   bool _isDark = ThemeController.isDark;
+  Timer? _deepLinkTimer;
 
   @override
   void initState() {
@@ -34,6 +36,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _currentUserName = widget.userName;
     _loadUserData();
     ThemeController.themeNotifier.addListener(_updateTheme);
+    
+    // Check deep link từ notification mỗi 400ms để nhảy tab Focus
+    _deepLinkTimer = Timer.periodic(const Duration(milliseconds: 400), (timer) {
+      if (ThemeController.requestToFocus) {
+        ThemeController.requestToFocus = false;
+        if (mounted && _currentIndex != 3) {
+          setState(() {
+            _currentIndex = 3; // Chuyển sang tab Focus (Pomodoro)
+          });
+        }
+      }
+    });
   }
 
   void _updateTheme() {
@@ -42,6 +56,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
+    _deepLinkTimer?.cancel();
     ThemeController.themeNotifier.removeListener(_updateTheme);
     super.dispose();
   }
@@ -50,7 +65,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final prefs = await SharedPreferences.getInstance();
     String email = prefs.getString('user_email') ?? '';
     if (email.isNotEmpty) {
-      // Đảm bảo load đúng dữ liệu cho user hiện tại
       await TaskStorage.init(email);
       await HistoryStorage.init(email);
       await EventStorage.init(email);
@@ -63,56 +77,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  void _showNotifications() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: _isDark ? AppColors.cardBg : Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Thông báo gần đây', style: TextStyle(color: _isDark ? Colors.white : Colors.black87, fontSize: 20, fontWeight: FontWeight.bold)),
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Đóng')),
-              ],
-            ),
-            const SizedBox(height: 20),
-            _buildNotificationItem('Lịch họp sắp diễn ra', 'Cuộc họp Hội đồng Đường lối bắt đầu sau 10 phút.', '10:20 AM'),
-            _buildNotificationItem('Nhiệm vụ chưa hoàn thành', 'Đừng quên hoàn thành báo cáo tiến độ hôm nay!', '08:00 AM'),
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNotificationItem(String title, String body, String time) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: _isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(title, style: TextStyle(color: _isDark ? AppColors.primary : Colors.blue, fontWeight: FontWeight.bold)),
-              Text(time, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(body, style: TextStyle(color: _isDark ? Colors.white70 : Colors.black54, fontSize: 13)),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -122,7 +86,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         currentIndex: _currentIndex,
         onTap: (index) {
           setState(() => _currentIndex = index);
-          if (index == 2) _loadUserData(); // Refresh home data
+          if (index == 2) _loadUserData(); 
         },
         type: BottomNavigationBarType.fixed,
         backgroundColor: _isDark ? AppColors.cardBg : Colors.white,
@@ -145,16 +109,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     switch (_currentIndex) {
       case 0: return const HistoryAnalyticsScreen();
       case 1: return const CalendarViewScreen();
-      case 2: return _buildHomeStack(); // Home Overview
+      case 2: return const TaskListScreen(); 
       case 3: return const PomodoroTimerScreen();
       case 4: return SettingsScreen(userName: _currentUserName);
-      default: return _buildHomeStack();
+      default: return const TaskListScreen();
     }
-  }
-
-  Widget _buildHomeStack() {
-    // Trả về TaskListScreen nhưng có thể thêm logic overlay header nếu cần
-    // Hiện tại TaskListScreen đã chứa Header và 4 card thống kê.
-    return const TaskListScreen();
   }
 }

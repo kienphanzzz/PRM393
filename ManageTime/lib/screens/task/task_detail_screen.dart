@@ -132,7 +132,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             _buildLabel('Tên nhiệm vụ', textColor),
             _buildTextField(_titleController, 'Nhập tên nhiệm vụ...', cardBg, textColor),
             const SizedBox(height: 20),
-            
+
             _buildLabel('Mô tả', textColor),
             _buildTextField(_descController, 'Thêm chi tiết...', cardBg, textColor, maxLines: 3),
             const SizedBox(height: 20),
@@ -166,7 +166,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               ],
             ),
             const SizedBox(height: 40),
-            
+
             SizedBox(
               width: double.infinity,
               height: 54,
