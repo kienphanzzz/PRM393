@@ -17,10 +17,10 @@ class TaskListScreen extends StatefulWidget {
 
 class _TaskListScreenState extends State<TaskListScreen> {
   bool _isDark = ThemeController.isDark;
-
   String _currentUserName = 'User';
   String _searchQuery = '';
   String _taskFilter = 'All';
+  String _prioritySort = 'HighToLow';
 
   final TextEditingController _searchController = TextEditingController();
 
@@ -33,9 +33,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
   @override
   void initState() {
     super.initState();
-
     _loadUserData();
-
     ThemeController.themeNotifier.addListener(_updateTheme);
   }
 
@@ -60,9 +58,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
   @override
   void dispose() {
     _searchController.dispose();
-
     ThemeController.themeNotifier.removeListener(_updateTheme);
-
     super.dispose();
   }
 
@@ -117,22 +113,37 @@ class _TaskListScreenState extends State<TaskListScreen> {
   }
 
   int _priorityScore(String priority) {
-    switch (priority) {
-      case 'High':
-        return 0;
-      case 'Medium':
-        return 1;
-      case 'Low':
-        return 2;
-      default:
-        return 3;
+    final String p = priority.toLowerCase().trim();
+
+    if (p.contains('low')) return 0;
+    if (p.contains('medium')) return 1;
+    if (p.contains('high')) return 2;
+
+    return 1;
+  }
+
+  Color _priorityColor(String priority) {
+    final String p = priority.toLowerCase().trim();
+
+    if (p.contains('high')) {
+      return Colors.redAccent;
     }
+
+    if (p.contains('medium')) {
+      return Colors.amber;
+    }
+
+    if (p.contains('low')) {
+      return Colors.grey;
+    }
+
+    return AppColors.primary;
   }
 
   List<TaskModel> _getSearchedTasks() {
     final String query = _searchQuery.toLowerCase().trim();
 
-    final tasks = TaskStorage.todoTasks.where((task) {
+    final List<TaskModel> tasks = TaskStorage.todoTasks.where((task) {
       final bool matchesTitle = task.title.toLowerCase().contains(query);
       final bool matchesDesc = task.description.toLowerCase().contains(query);
       final bool matchesPriority = task.priority.toLowerCase().contains(query);
@@ -145,8 +156,16 @@ class _TaskListScreenState extends State<TaskListScreen> {
         return a.isCompleted ? 1 : -1;
       }
 
-      final int priorityCompare =
-      _priorityScore(a.priority).compareTo(_priorityScore(b.priority));
+      final int aPriority = _priorityScore(a.priority);
+      final int bPriority = _priorityScore(b.priority);
+
+      int priorityCompare;
+
+      if (_prioritySort == 'LowToHigh') {
+        priorityCompare = aPriority.compareTo(bPriority);
+      } else {
+        priorityCompare = bPriority.compareTo(aPriority);
+      }
 
       if (priorityCompare != 0) return priorityCompare;
 
@@ -187,9 +206,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          value
-              ? 'Đã hoàn thành "${task.title}"'
-              : 'Đã mở lại "${task.title}"',
+          value ? 'Đã hoàn thành "${task.title}"' : 'Đã mở lại "${task.title}"',
         ),
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 1),
@@ -207,10 +224,10 @@ class _TaskListScreenState extends State<TaskListScreen> {
         ),
       ),
       builder: (context) {
-        final pendingTasks =
+        final List<TaskModel> pendingTasks =
         TaskStorage.todoTasks.where((task) => !task.isCompleted).toList();
 
-        final overdueTasks = pendingTasks.where(_isOverdue).toList();
+        final List<TaskModel> overdueTasks = pendingTasks.where(_isOverdue).toList();
 
         return Container(
           padding: const EdgeInsets.all(24),
@@ -334,6 +351,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
     visibleTasks.where((task) => task.isCompleted).toList();
 
     final int totalTasks = TaskStorage.todoTasks.length;
+
     final int completedCount =
         TaskStorage.todoTasks.where((task) => task.isCompleted).length;
 
@@ -428,6 +446,8 @@ class _TaskListScreenState extends State<TaskListScreen> {
               ),
               const SizedBox(height: 16),
               _buildFilterChips(),
+              const SizedBox(height: 12),
+              _buildPrioritySortChips(),
               const SizedBox(height: 24),
               if (visibleTasks.isEmpty)
                 Center(
@@ -596,7 +616,9 @@ class _TaskListScreenState extends State<TaskListScreen> {
       ),
       child: TextField(
         controller: _searchController,
-        style: TextStyle(color: textColor),
+        style: TextStyle(
+          color: textColor,
+        ),
         onChanged: (val) {
           setState(() {
             _searchQuery = val;
@@ -649,6 +671,61 @@ class _TaskListScreenState extends State<TaskListScreen> {
     );
   }
 
+  Widget _buildPrioritySortChips() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _buildSortChip(
+            label: 'High → Low',
+            value: 'HighToLow',
+            icon: Icons.keyboard_double_arrow_down_rounded,
+          ),
+          const SizedBox(width: 10),
+          _buildSortChip(
+            label: 'Low → High',
+            value: 'LowToHigh',
+            icon: Icons.keyboard_double_arrow_up_rounded,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSortChip({
+    required String label,
+    required String value,
+    required IconData icon,
+  }) {
+    final bool selected = _prioritySort == value;
+
+    return ChoiceChip(
+      avatar: Icon(
+        icon,
+        size: 17,
+        color: selected
+            ? AppColors.background
+            : (_isDark ? Colors.white70 : Colors.black54),
+      ),
+      label: Text(label),
+      selected: selected,
+      selectedColor: AppColors.primary,
+      backgroundColor: _isDark ? AppColors.cardBg : Colors.white,
+      labelStyle: TextStyle(
+        color: selected
+            ? AppColors.background
+            : (_isDark ? Colors.white : Colors.black87),
+        fontWeight: FontWeight.bold,
+        fontSize: 12,
+      ),
+      onSelected: (_) {
+        setState(() {
+          _prioritySort = value;
+        });
+      },
+    );
+  }
+
   Widget _buildTaskSection({
     required String title,
     required int count,
@@ -687,7 +764,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
             physics: const NeverScrollableScrollPhysics(),
             itemCount: tasks.length,
             itemBuilder: (context, index) {
-              final task = tasks[index];
+              final TaskModel task = tasks[index];
 
               return _buildTaskCard(
                 task,
@@ -733,24 +810,19 @@ class _TaskListScreenState extends State<TaskListScreen> {
       Color txtColor,
       ) {
     final bool overdue = _isOverdue(task);
-
-    final Color priorityColor = task.priority == 'High'
-        ? Colors.redAccent
-        : task.priority == 'Medium'
-        ? Colors.orangeAccent
-        : Colors.greenAccent;
+    final Color priorityColor = _priorityColor(task.priority);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(20),
-        border: overdue
-            ? Border.all(
-          color: Colors.redAccent,
-          width: 1,
-        )
-            : null,
+        border: task.isCompleted
+            ? null
+            : Border.all(
+          color: priorityColor,
+          width: 1.2,
+        ),
       ),
       child: ListTile(
         onTap: () => _openTaskDetails(task),
@@ -773,8 +845,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
             style: TextStyle(
               color: txtColor,
               fontWeight: FontWeight.bold,
-              decoration:
-              task.isCompleted ? TextDecoration.lineThrough : null,
+              decoration: task.isCompleted ? TextDecoration.lineThrough : null,
             ),
           ),
         ),
@@ -814,7 +885,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
         vertical: 3,
       ),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withOpacity(0.14),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(

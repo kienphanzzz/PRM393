@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -18,8 +17,7 @@ class PomodoroTimerScreen extends StatefulWidget {
   State<PomodoroTimerScreen> createState() => _PomodoroTimerScreenState();
 }
 
-class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
-    with SingleTickerProviderStateMixin {
+class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
   String _currentMode = 'Focus';
 
   int _focusMins = 25;
@@ -40,8 +38,10 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
   int _pauseCount = 0;
 
   Timer? _stopCheckTimer;
+  StreamSubscription? _updateSub;
+  StreamSubscription? _finishedSub;
 
-  late AnimationController _pulseController;
+  TaskModel? _selectedTask;
 
   final List<String> _musicList = [
     'Deep Focus Lo-fi',
@@ -52,21 +52,9 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
     'Cyberpunk Focus Beats',
   ];
 
-  TaskModel? _selectedTask;
-
-  StreamSubscription? _updateSub;
-  StreamSubscription? _finishedSub;
-
   @override
   void initState() {
     super.initState();
-
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1300),
-      lowerBound: 0.94,
-      upperBound: 1.04,
-    );
 
     _loadSettings();
     _listenService();
@@ -166,6 +154,7 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
     final int s = seconds % 60;
 
     if (m <= 0) return '${s}s';
+
     return '${m}m ${s}s';
   }
 
@@ -179,14 +168,6 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
         _secondsRemaining = event['seconds'] ?? _secondsRemaining;
         _isRunning = event['isRunning'] ?? _isRunning;
       });
-
-      if (_isRunning && !_pulseController.isAnimating) {
-        _pulseController.repeat(reverse: true);
-      }
-
-      if (!_isRunning && _pulseController.isAnimating) {
-        _pulseController.stop();
-      }
     });
 
     _finishedSub = service.on('finished').listen((event) {
@@ -264,8 +245,6 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
     setState(() {
       _isRunning = true;
     });
-
-    _pulseController.repeat(reverse: true);
   }
 
   void _pauseSession({
@@ -282,8 +261,6 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
         _pauseCount++;
       }
     });
-
-    _pulseController.stop();
   }
 
   void _handleInterruptionFromNotification() {
@@ -292,8 +269,6 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
     setState(() {
       _isRunning = false;
     });
-
-    _pulseController.stop();
 
     _showStopDialog(fromNotification: true);
   }
@@ -315,6 +290,9 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
       builder: (dialogContext) {
         return AlertDialog(
           backgroundColor: AppColors.cardBg,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           title: const Text(
             '⚠️ Dừng phiên Pomodoro?',
             style: TextStyle(
@@ -335,14 +313,18 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
                 onPressed: () => Navigator.pop(dialogContext, 'continue'),
                 child: const Text(
                   'Tiếp tục',
-                  style: TextStyle(color: AppColors.primary),
+                  style: TextStyle(
+                    color: AppColors.primary,
+                  ),
                 ),
               ),
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, 'discard'),
               child: const Text(
                 'Dừng không lưu',
-                style: TextStyle(color: Colors.redAccent),
+                style: TextStyle(
+                  color: Colors.redAccent,
+                ),
               ),
             ),
             ElevatedButton(
@@ -400,6 +382,9 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
       builder: (dialogContext) {
         return AlertDialog(
           backgroundColor: AppColors.cardBg,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           title: Text(
             title,
             style: const TextStyle(
@@ -419,7 +404,9 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
               onPressed: () => Navigator.pop(dialogContext, false),
               child: const Text(
                 'Ở lại',
-                style: TextStyle(color: AppColors.textMuted),
+                style: TextStyle(
+                  color: AppColors.textMuted,
+                ),
               ),
             ),
             ElevatedButton(
@@ -446,8 +433,7 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
   Future<void> _handleResetPressed() async {
     final bool allowed = await _confirmInterruptAction(
       title: 'Reset phiên hiện tại?',
-      content:
-      'Pomodoro đang chạy. Reset sẽ dừng phiên hiện tại và không lưu dữ liệu.',
+      content: 'Pomodoro đang chạy.\nReset sẽ dừng phiên hiện tại và không lưu dữ liệu.',
       confirmText: 'Reset',
     );
 
@@ -474,8 +460,6 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
         _selectedTask = null;
       }
     });
-
-    _pulseController.stop();
   }
 
   Future<void> _changeMode(String mode) async {
@@ -483,8 +467,7 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
 
     final bool allowed = await _confirmInterruptAction(
       title: 'Đổi chế độ Pomodoro?',
-      content:
-      'Phiên hiện tại đang chạy. Đổi chế độ sẽ dừng phiên này và không lưu dữ liệu.',
+      content: 'Phiên hiện tại đang chạy.\nĐổi chế độ sẽ dừng phiên này và không lưu dữ liệu.',
       confirmText: 'Đổi',
     );
 
@@ -497,12 +480,8 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
     setState(() {
       _currentMode = mode;
       _isRunning = false;
-      _secondsRemaining =
-          (mode == 'Focus'
-              ? _focusMins
-              : (mode == 'Short' ? _shortMins : _longMins)) *
-              60;
-      _sessionTargetSeconds = _secondsRemaining;
+      _secondsRemaining = _getModeSeconds();
+      _sessionTargetSeconds = _getModeSeconds();
       _sessionStartAt = null;
       _pauseCount = 0;
 
@@ -510,24 +489,18 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
         _selectedTask = null;
       }
     });
-
-    _pulseController.stop();
   }
 
   Future<void> _handleFinished() async {
     if (_finishDialogShowing) return;
 
     if (_currentMode == 'Focus') {
-      FlutterBackgroundService().invoke('kill');
-
       if (!mounted) return;
 
       setState(() {
         _isRunning = false;
         _secondsRemaining = 0;
       });
-
-      _pulseController.stop();
 
       await _showFocusEvaluationDialog(
         status: 'Completed',
@@ -540,45 +513,21 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
       if (!mounted) return;
 
       setState(() {
+        _currentMode = 'Focus';
         _isRunning = false;
+        _secondsRemaining = _focusMins * 60;
+        _sessionTargetSeconds = _focusMins * 60;
+        _sessionStartAt = null;
+        _pauseCount = 0;
       });
 
-      _pulseController.stop();
-
-      await _switchModeAfterBreak();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Đã kết thúc thời gian nghỉ. Quay lại Focus nhé!'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
-  }
-
-  Future<void> _switchModeAfterBreak() async {
-    if (!mounted) return;
-
-    setState(() {
-      _currentMode = 'Focus';
-      _secondsRemaining = _focusMins * 60;
-      _sessionTargetSeconds = _focusMins * 60;
-      _sessionStartAt = null;
-      _pauseCount = 0;
-      _selectedTask = null;
-      _isRunning = false;
-    });
-  }
-
-  Future<void> _switchToShortBreakAfterSave() async {
-    FlutterBackgroundService().invoke('kill');
-
-    if (!mounted) return;
-
-    setState(() {
-      _currentMode = 'Short';
-      _isRunning = false;
-      _secondsRemaining = _shortMins * 60;
-      _sessionTargetSeconds = _shortMins * 60;
-      _sessionStartAt = null;
-      _pauseCount = 0;
-      _selectedTask = null;
-    });
-
-    _pulseController.stop();
   }
 
   int _calculateFocusScore({
@@ -588,28 +537,37 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
     required int pauseCount,
     required String rating,
   }) {
-    if (targetMinutes <= 0) return 0;
+    int score = 0;
 
-    final double completionRatio = actualMinutes / targetMinutes;
+    if (targetMinutes > 0) {
+      final double ratio = actualMinutes / targetMinutes;
+      score += (ratio.clamp(0.0, 1.0) * 60).round();
+    }
 
-    int score = (completionRatio.clamp(0.0, 1.0) * 70).round();
+    if (status == 'Completed') {
+      score += 25;
+    } else {
+      score += 10;
+    }
 
-    final int pauseScore = max(0, 20 - pauseCount * 5);
-    score += pauseScore;
+    score -= pauseCount * 5;
 
     if (rating == 'Good') {
-      score += 10;
+      score += 15;
     } else if (rating == 'Normal') {
-      score += 6;
+      score += 8;
     } else {
-      score += 2;
+      score -= 5;
     }
 
-    if (status != 'Completed') {
-      score = min(score, 65);
-    }
+    return score.clamp(0, 100);
+  }
 
-    return score.clamp(0, 100).toInt();
+  String _scoreLabel(int score) {
+    if (score >= 85) return 'Rất tập trung';
+    if (score >= 65) return 'Khá tốt';
+    if (score >= 45) return 'Ổn nhưng cần cải thiện';
+    return 'Dễ mất tập trung';
   }
 
   Future<void> _showFocusEvaluationDialog({
@@ -742,7 +700,7 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
                           },
                         ),
                         _buildRatingOption(
-                          title: '🙂 Ổn',
+                          title: '😐 Ổn',
                           value: 'Normal',
                           selected: selectedRating,
                           onTap: () {
@@ -767,7 +725,9 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
                     TextField(
                       controller: noteController,
                       maxLines: 2,
-                      style: const TextStyle(color: Colors.white),
+                      style: const TextStyle(
+                        color: Colors.white,
+                      ),
                       decoration: InputDecoration(
                         hintText: 'Ghi chú ngắn về phiên này...',
                         hintStyle: const TextStyle(
@@ -790,11 +750,21 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                   ),
-                  onPressed: () {
-                    Navigator.pop(dialogContext, {
+                  onPressed: () async {
+                    FocusScope.of(dialogContext).unfocus();
+
+                    final Map<String, String> data = {
                       'rating': selectedRating,
                       'note': noteController.text.trim(),
-                    });
+                    };
+
+                    await Future.delayed(
+                      const Duration(milliseconds: 150),
+                    );
+
+                    if (Navigator.of(dialogContext).canPop()) {
+                      Navigator.of(dialogContext).pop(data);
+                    }
                   },
                   child: const Text(
                     'Lưu phiên',
@@ -811,6 +781,7 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
       },
     );
 
+    await Future.delayed(const Duration(milliseconds: 150));
     noteController.dispose();
 
     if (result == null) {
@@ -870,42 +841,57 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
     final prefs = await SharedPreferences.getInstance();
     final String email = prefs.getString('user_email') ?? '';
 
-    final DateTime startAt = _sessionStartAt ?? DateTime.now();
-    final DateTime endAt = DateTime.now();
+    final DateTime now = DateTime.now();
+    final DateTime startAt = _sessionStartAt ??
+        now.subtract(
+          Duration(
+            minutes: actualMinutes,
+          ),
+        );
 
-    final FocusHistoryModel record = FocusHistoryModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      taskId: _selectedTask?.id ?? '',
+    final int targetMinutes = _sessionTargetSeconds ~/ 60;
+
+    final record = FocusHistoryModel(
+      id: now.millisecondsSinceEpoch.toString(),
       taskTitle: _selectedTask?.title ?? 'Phiên tự do',
       durationMinutes: actualMinutes,
-      targetMinutes: _sessionTargetSeconds ~/ 60,
+      dateStr: DateFormat('E, MMM dd').format(now),
+      timeStr: DateFormat('hh:mm a').format(now),
+      userEmail: email,
+      status: status,
+      taskId: _selectedTask?.id ?? '',
+      targetMinutes: targetMinutes,
       actualMinutes: actualMinutes,
-      dateStr: DateFormat('E, MMM dd').format(startAt),
-      timeStr: DateFormat('HH:mm').format(startAt),
       startAt: startAt.toIso8601String(),
-      endAt: endAt.toIso8601String(),
-      dateKey: DateFormat('yyyy-MM-dd').format(startAt),
-      weekKey: HistoryStorage.getWeekKey(startAt),
-      monthKey: DateFormat('yyyy-MM').format(startAt),
+      endAt: now.toIso8601String(),
+      dateKey: DateFormat('yyyy-MM-dd').format(now),
+      weekKey: HistoryStorage.getWeekKey(now),
+      monthKey: DateFormat('yyyy-MM').format(now),
       pauseCount: _pauseCount,
       focusScore: focusScore,
       rating: rating,
       note: note,
       visualMode: _visualMode,
-      userEmail: email,
-      status: status,
     );
 
     HistoryStorage.historyList.insert(0, record);
-
     await HistoryStorage.saveHistoryToDisk();
   }
 
-  String _scoreLabel(int score) {
-    if (score >= 90) return 'Excellent Focus';
-    if (score >= 70) return 'Good Focus';
-    if (score >= 50) return 'Average Focus';
-    return 'Interrupted Focus';
+  Future<void> _switchToShortBreakAfterSave() async {
+    FlutterBackgroundService().invoke('kill');
+
+    if (!mounted) return;
+
+    setState(() {
+      _currentMode = 'Short';
+      _isRunning = false;
+      _secondsRemaining = _shortMins * 60;
+      _sessionTargetSeconds = _shortMins * 60;
+      _sessionStartAt = null;
+      _pauseCount = 0;
+      _selectedTask = null;
+    });
   }
 
   Widget _buildResultRow({
@@ -913,25 +899,28 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
     required String value,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 7),
+      padding: const EdgeInsets.only(
+        bottom: 8,
+      ),
       child: Row(
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 12,
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 12,
+              ),
             ),
           ),
-          const Spacer(),
           Flexible(
             child: Text(
               value,
               textAlign: TextAlign.right,
               style: const TextStyle(
                 color: Colors.white,
-                fontWeight: FontWeight.bold,
                 fontSize: 13,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ),
@@ -946,22 +935,24 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
     required String selected,
     required VoidCallback onTap,
   }) {
-    final bool isSelected = selected == value;
+    final bool isSelected = value == selected;
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
         width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 8),
+        margin: const EdgeInsets.only(
+          bottom: 8,
+        ),
         padding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 10,
+          horizontal: 14,
+          vertical: 12,
         ),
         decoration: BoxDecoration(
           color: isSelected
               ? AppColors.primary.withOpacity(0.18)
-              : Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(14),
+              : Colors.white.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected ? AppColors.primary : Colors.transparent,
           ),
@@ -970,8 +961,8 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
           title,
           style: TextStyle(
             color: isSelected ? AppColors.primary : Colors.white70,
-            fontWeight: FontWeight.bold,
             fontSize: 13,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),
       ),
@@ -985,12 +976,18 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
 
     showDialog(
       context: context,
-      builder: (c) {
+      builder: (dialogContext) {
         return AlertDialog(
           backgroundColor: AppColors.cardBg,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+          ),
           title: const Text(
-            '🎯 Chọn mục tiêu',
-            style: TextStyle(color: Colors.white),
+            '🎯 Chọn nhiệm vụ',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           content: SizedBox(
             width: double.maxFinite,
@@ -1005,34 +1002,61 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
                 : ListView.builder(
               shrinkWrap: true,
               itemCount: availableTasks.length,
-              itemBuilder: (ctx, i) {
-                final TaskModel task = availableTasks[i];
+              itemBuilder: (context, index) {
+                final TaskModel task = availableTasks[index];
 
-                return ListTile(
-                  title: Text(
-                    task.title,
-                    style: const TextStyle(color: Colors.white),
+                return Container(
+                  margin: const EdgeInsets.only(
+                    bottom: 8,
                   ),
-                  subtitle: Text(
-                    '${task.priority} • ${task.deadline}',
-                    style: const TextStyle(color: Colors.white54),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  onTap: () {
-                    setState(() {
-                      _selectedTask = task;
-                    });
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor:
+                      _priorityColor(task.priority).withOpacity(0.15),
+                      child: Icon(
+                        Icons.flag_rounded,
+                        color: _priorityColor(task.priority),
+                      ),
+                    ),
+                    title: Text(
+                      task.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    subtitle: Text(
+                      '${task.priority} • ${task.deadline}',
+                      style: const TextStyle(
+                        color: Colors.white54,
+                      ),
+                    ),
+                    onTap: () {
+                      setState(() {
+                        _selectedTask = task;
+                      });
 
-                    Navigator.pop(c);
-                    _toggle();
-                  },
+                      Navigator.pop(dialogContext);
+                      _toggle();
+                    },
+                  ),
                 );
               },
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(c),
-              child: const Text('Đóng'),
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text(
+                'Đóng',
+                style: TextStyle(
+                  color: AppColors.primary,
+                ),
+              ),
             ),
           ],
         );
@@ -1075,7 +1099,7 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
 
                     return ListTile(
                       leading: Icon(
-                        Icons.music_note,
+                        Icons.music_note_rounded,
                         color: isSelected ? AppColors.primary : Colors.grey,
                       ),
                       title: Text(
@@ -1084,6 +1108,9 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
                           color: isSelected
                               ? AppColors.primary
                               : Colors.white70,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                         ),
                       ),
                       trailing: isSelected
@@ -1133,12 +1160,43 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
     }
   }
 
+  Color _priorityColor(String priority) {
+    final String p = priority.toLowerCase();
+
+    if (p.contains('high')) return Colors.redAccent;
+    if (p.contains('medium')) return Colors.amber;
+    if (p.contains('low')) return Colors.grey;
+
+    return AppColors.primary;
+  }
+
+  String _modeSubtitle() {
+    if (_currentMode == 'Short') return 'Short Break';
+    if (_currentMode == 'Long') return 'Long Break';
+    return 'Deep Focus';
+  }
+
+  String _mainStatusText() {
+    if (_currentMode == 'Focus') {
+      if (_selectedTask == null) {
+        return 'Hãy chọn một nhiệm vụ để bắt đầu';
+      }
+
+      return 'Đang làm: ${_selectedTask!.title}';
+    }
+
+    if (_currentMode == 'Short') {
+      return 'Nghỉ ngắn để nạp lại năng lượng';
+    }
+
+    return 'Nghỉ dài sau nhiều phiên tập trung';
+  }
+
   @override
   void dispose() {
     _updateSub?.cancel();
     _finishedSub?.cancel();
     _stopCheckTimer?.cancel();
-    _pulseController.dispose();
 
     ThemeController.themeNotifier.removeListener(_rebuild);
 
@@ -1147,98 +1205,391 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
 
   @override
   Widget build(BuildContext context) {
-    final Color txt = ThemeController.isDark ? Colors.white : Colors.black87;
+    final bool isDark = ThemeController.isDark;
+
+    final Color pageBg =
+    isDark ? AppColors.background : const Color(0xFFF7F8FA);
+    final Color cardBg = isDark ? AppColors.cardBg : Colors.white;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    final Color subTextColor = isDark ? Colors.white70 : Colors.black54;
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: pageBg,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(
+            20,
+            18,
+            20,
+            26,
+          ),
           child: Column(
             children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildTab('Focus'),
-                  _buildTab('Short'),
-                  _buildTab('Long'),
+                  Expanded(
+                    child: Text(
+                      'Pomodoro',
+                      style: TextStyle(
+                        color: textColor,
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _handleResetPressed,
+                    icon: Icon(
+                      Icons.refresh_rounded,
+                      color: textColor,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _showMusicPicker,
+                    icon: Icon(
+                      Icons.music_note_rounded,
+                      color: _isMusicOn ? AppColors.primary : textColor,
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 22),
-              _buildMusicBox(txt),
-              const SizedBox(height: 20),
-              _buildVisualModeSwitcher(txt),
               const SizedBox(height: 18),
-              ScaleTransition(
-                scale: _isRunning
-                    ? _pulseController
-                    : const AlwaysStoppedAnimation(1.0),
-                child: _buildTimerVisual(txt),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                _selectedTask != null
-                    ? '🎯 ĐANG LÀM: ${_selectedTask!.title.toUpperCase()}'
-                    : _currentMode == 'Focus'
-                    ? 'HÃY CHỌN MỘT NHIỆM VỤ!'
-                    : 'ĐANG NGHỈ NGƠI',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  letterSpacing: 1.4,
-                  color: AppColors.textMuted,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: cardBg,
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    if (!isDark)
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 16,
+                        offset: const Offset(0, 8),
+                      ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    _buildModeTab(
+                      mode: 'Focus',
+                      label: 'Focus',
+                      textColor: textColor,
+                    ),
+                    _buildModeTab(
+                      mode: 'Short',
+                      label: 'Short',
+                      textColor: textColor,
+                    ),
+                    _buildModeTab(
+                      mode: 'Long',
+                      label: 'Long',
+                      textColor: textColor,
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 18),
-              _buildSessionInfo(txt),
-              const SizedBox(height: 26),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      Icons.refresh,
-                      color: txt,
-                      size: 30,
-                    ),
-                    onPressed: _handleResetPressed,
-                  ),
-                  const SizedBox(width: 30),
-                  GestureDetector(
-                    onTap: _toggle,
-                    child: Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
+              const SizedBox(height: 22),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: cardBg,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    if (!isDark)
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 18,
+                        offset: const Offset(0, 8),
+                      ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      _modeSubtitle(),
+                      style: const TextStyle(
                         color: AppColors.primary,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withOpacity(0.3),
-                            blurRadius: 20,
-                            offset: const Offset(0, 10),
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _mainStatusText(),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: subTextColor,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 26),
+                    SizedBox(
+                      width: 250,
+                      height: 250,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          SizedBox(
+                            width: 245,
+                            height: 245,
+                            child: CircularProgressIndicator(
+                              value: _progressValue(),
+                              strokeWidth: 14,
+                              backgroundColor:
+                              AppColors.textMuted.withOpacity(0.18),
+                              valueColor: const AlwaysStoppedAnimation<Color>(
+                                AppColors.primary,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            width: 205,
+                            height: 205,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: AppColors.primary.withOpacity(0.06),
+                              border: Border.all(
+                                color: AppColors.primary.withOpacity(0.2),
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  _formatTimer(_secondsRemaining),
+                                  style: TextStyle(
+                                    color: textColor,
+                                    fontSize: 46,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: -1,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  _isRunning
+                                      ? 'Đang chạy'
+                                      : _secondsRemaining == _getModeSeconds()
+                                      ? 'Sẵn sàng'
+                                      : 'Đang tạm dừng',
+                                  style: TextStyle(
+                                    color: subTextColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
-                      child: Icon(
-                        _isRunning ? Icons.pause : Icons.play_arrow,
-                        size: 44,
-                        color: AppColors.background,
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildRoundButton(
+                          icon: Icons.stop_rounded,
+                          onTap: () => _showStopDialog(),
+                          bgColor: Colors.redAccent.withOpacity(0.14),
+                          iconColor: Colors.redAccent,
+                        ),
+                        const SizedBox(width: 22),
+                        GestureDetector(
+                          onTap: _toggle,
+                          child: Container(
+                            width: 76,
+                            height: 76,
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.primary.withOpacity(0.35),
+                                  blurRadius: 24,
+                                  offset: const Offset(0, 12),
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              _isRunning
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded,
+                              color: AppColors.background,
+                              size: 46,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 22),
+                        _buildRoundButton(
+                          icon: Icons.restart_alt_rounded,
+                          onTap: _handleResetPressed,
+                          bgColor: AppColors.primary.withOpacity(0.14),
+                          iconColor: AppColors.primary,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              if (_selectedTask != null)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: cardBg,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: _priorityColor(
+                          _selectedTask!.priority,
+                        ).withOpacity(0.15),
+                        child: Icon(
+                          Icons.flag_rounded,
+                          color: _priorityColor(_selectedTask!.priority),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _selectedTask!.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: textColor,
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${_selectedTask!.priority} • ${_selectedTask!.deadline}',
+                              style: TextStyle(
+                                color: subTextColor,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: _isRunning
+                            ? null
+                            : () {
+                          setState(() {
+                            _selectedTask = null;
+                          });
+                        },
+                        icon: Icon(
+                          Icons.close_rounded,
+                          color: _isRunning
+                              ? AppColors.textMuted.withOpacity(0.35)
+                              : AppColors.textMuted,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 30),
-                  IconButton(
-                    icon: Icon(
-                      Icons.stop_rounded,
-                      color: txt,
-                      size: 30,
+                ),
+              const SizedBox(height: 18),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: cardBg,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          _isMusicOn
+                              ? Icons.music_note_rounded
+                              : Icons.music_off_rounded,
+                          color: _isMusicOn
+                              ? AppColors.primary
+                              : AppColors.textMuted,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: _showMusicPicker,
+                            child: Text(
+                              _isMusicOn
+                                  ? _selectedMusic
+                                  : 'Nhạc tập trung đang tắt',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: textColor,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Switch(
+                          value: _isMusicOn,
+                          activeColor: AppColors.primary,
+                          onChanged: _toggleMusic,
+                        ),
+                      ],
                     ),
-                    onPressed: () => _showStopDialog(),
-                  ),
-                ],
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildVisualModeChip(
+                            label: 'Ring',
+                            value: 'ring',
+                            icon: Icons.donut_large_rounded,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _buildVisualModeChip(
+                            label: 'Minimal',
+                            value: 'minimal',
+                            icon: Icons.center_focus_strong_rounded,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.timer_outlined,
+                          color: AppColors.textMuted,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Đã làm: ${_formatShortDuration(_elapsedSeconds())}',
+                          style: TextStyle(
+                            color: subTextColor,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          'Pause: $_pauseCount',
+                          style: TextStyle(
+                            color: subTextColor,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 28),
             ],
           ),
         ),
@@ -1246,612 +1597,106 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
     );
   }
 
-  Widget _buildMusicBox(Color txt) {
-    return GestureDetector(
-      onTap: _showMusicPicker,
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 10,
-        ),
-        decoration: BoxDecoration(
-          color: txt.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              _isMusicOn ? Icons.music_note : Icons.music_off,
-              color: _isMusicOn ? AppColors.primary : Colors.grey,
-              size: 18,
-            ),
-            const SizedBox(width: 10),
-            Flexible(
-              child: Text(
-                _selectedMusic,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: txt,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Switch(
-              value: _isMusicOn,
-              activeColor: AppColors.primary,
-              onChanged: _toggleMusic,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildVisualModeSwitcher(Color txt) {
-    return Container(
-      padding: const EdgeInsets.all(5),
-      decoration: BoxDecoration(
-        color: txt.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildVisualButton(
-            mode: 'ring',
-            icon: Icons.donut_large_rounded,
-            label: 'Ring',
-          ),
-          _buildVisualButton(
-            mode: 'hourglass',
-            icon: Icons.hourglass_bottom_rounded,
-            label: 'Sand',
-          ),
-          _buildVisualButton(
-            mode: 'clock',
-            icon: Icons.access_time_rounded,
-            label: 'Clock',
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVisualButton({
+  Widget _buildModeTab({
     required String mode,
-    required IconData icon,
     required String label,
+    required Color textColor,
   }) {
-    final bool selected = _visualMode == mode;
+    final bool selected = _currentMode == mode;
 
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => _changeMode(mode),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(
+            vertical: 13,
+          ),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: selected ? AppColors.background : textColor,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRoundButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    required Color bgColor,
+    required Color iconColor,
+  }) {
     return GestureDetector(
-      onTap: () => _saveVisualMode(mode),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        padding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 8,
-        ),
+      onTap: onTap,
+      child: Container(
+        width: 54,
+        height: 54,
         decoration: BoxDecoration(
-          color: selected ? AppColors.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(14),
+          color: bgColor,
+          shape: BoxShape.circle,
         ),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: 16,
-              color: selected ? AppColors.background : AppColors.textMuted,
-            ),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: TextStyle(
-                color: selected ? AppColors.background : AppColors.textMuted,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
+        child: Icon(
+          icon,
+          color: iconColor,
+          size: 28,
         ),
       ),
     );
   }
 
-  Widget _buildTimerVisual(Color txt) {
-    final double progress = _progressValue();
-    final String time = _formatTimer(_secondsRemaining);
-
-    if (_visualMode == 'hourglass') {
-      return SizedBox(
-        width: 260,
-        height: 260,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            CustomPaint(
-              size: const Size(230, 230),
-              painter: HourglassTimerPainter(
-                progress: progress,
-                color: AppColors.primary,
-                backgroundColor: txt.withOpacity(0.16),
-              ),
-            ),
-            Positioned(
-              bottom: 20,
-              child: Text(
-                time,
-                style: TextStyle(
-                  color: txt,
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -1,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_visualMode == 'clock') {
-      return SizedBox(
-        width: 260,
-        height: 260,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            CustomPaint(
-              size: const Size(230, 230),
-              painter: ClockTimerPainter(
-                progress: progress,
-                color: AppColors.primary,
-                backgroundColor: txt.withOpacity(0.16),
-              ),
-            ),
-            Text(
-              time,
-              style: TextStyle(
-                color: txt,
-                fontSize: 38,
-                fontWeight: FontWeight.bold,
-                letterSpacing: -1,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return SizedBox(
-      width: 270,
-      height: 270,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          CustomPaint(
-            size: const Size(250, 250),
-            painter: RingTimerPainter(
-              progress: progress,
-              color: AppColors.primary,
-              backgroundColor: txt.withOpacity(0.12),
-            ),
-          ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                time,
-                style: TextStyle(
-                  fontSize: 58,
-                  fontWeight: FontWeight.bold,
-                  color: txt,
-                  letterSpacing: -2,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${(progress * 100).round()}% completed',
-                style: const TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSessionInfo(Color txt) {
-    final String startedAt = _sessionStartAt == null
-        ? '--:--'
-        : DateFormat('HH:mm').format(_sessionStartAt!);
-
-    final int elapsed = _elapsedSeconds();
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: txt.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: AppColors.primary.withOpacity(0.16),
-        ),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              _buildInfoItem(
-                title: 'Started',
-                value: startedAt,
-                icon: Icons.play_circle_outline_rounded,
-              ),
-              _buildInfoItem(
-                title: 'Focused',
-                value: _formatShortDuration(elapsed),
-                icon: Icons.bolt_rounded,
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              _buildInfoItem(
-                title: 'Remaining',
-                value: _formatShortDuration(_secondsRemaining),
-                icon: Icons.hourglass_bottom_rounded,
-              ),
-              _buildInfoItem(
-                title: 'Pause',
-                value: '$_pauseCount',
-                icon: Icons.pause_circle_outline_rounded,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoItem({
-    required String title,
+  Widget _buildVisualModeChip({
+    required String label,
     required String value,
     required IconData icon,
   }) {
-    return Expanded(
-      child: Row(
-        children: [
-          Icon(
-            icon,
-            color: AppColors.primary,
-            size: 18,
-          ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 11,
-                  ),
-                ),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTab(String mode) {
-    final bool sel = _currentMode == mode;
+    final bool selected = _visualMode == value;
 
     return GestureDetector(
-      onTap: () => _changeMode(mode),
+      onTap: () => _saveVisualMode(value),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
+        duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(
-          horizontal: 24,
+          horizontal: 12,
           vertical: 12,
         ),
         decoration: BoxDecoration(
-          color: sel ? AppColors.primary : AppColors.cardBg,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            if (sel)
-              BoxShadow(
-                color: AppColors.primary.withOpacity(0.3),
-                blurRadius: 10,
-              ),
-          ],
-        ),
-        child: Text(
-          mode,
-          style: TextStyle(
-            color: sel ? AppColors.background : Colors.white,
-            fontWeight: FontWeight.bold,
+          color: selected
+              ? AppColors.primary.withOpacity(0.15)
+              : Colors.white.withOpacity(0.04),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected ? AppColors.primary : Colors.transparent,
           ),
         ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              color: selected ? AppColors.primary : AppColors.textMuted,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? AppColors.primary : AppColors.textMuted,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
       ),
     );
-  }
-}
-
-class RingTimerPainter extends CustomPainter {
-  final double progress;
-  final Color color;
-  final Color backgroundColor;
-
-  RingTimerPainter({
-    required this.progress,
-    required this.color,
-    required this.backgroundColor,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final Offset center = size.center(Offset.zero);
-    final double radius = size.width / 2 - 12;
-
-    final Paint bgPaint = Paint()
-      ..color = backgroundColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 14
-      ..strokeCap = StrokeCap.round;
-
-    final Paint progressPaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 14
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawCircle(center, radius, bgPaint);
-
-    final Rect rect = Rect.fromCircle(
-      center: center,
-      radius: radius,
-    );
-
-    canvas.drawArc(
-      rect,
-      -pi / 2,
-      2 * pi * progress,
-      false,
-      progressPaint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant RingTimerPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.color != color ||
-        oldDelegate.backgroundColor != backgroundColor;
-  }
-}
-
-class HourglassTimerPainter extends CustomPainter {
-  final double progress;
-  final Color color;
-  final Color backgroundColor;
-
-  HourglassTimerPainter({
-    required this.progress,
-    required this.color,
-    required this.backgroundColor,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final double w = size.width;
-    final double h = size.height;
-
-    final Offset topLeft = Offset(w * 0.25, h * 0.08);
-    final Offset topRight = Offset(w * 0.75, h * 0.08);
-    final Offset center = Offset(w * 0.5, h * 0.5);
-    final Offset bottomLeft = Offset(w * 0.25, h * 0.92);
-    final Offset bottomRight = Offset(w * 0.75, h * 0.92);
-
-    final Path topTriangle = Path()
-      ..moveTo(topLeft.dx, topLeft.dy)
-      ..lineTo(topRight.dx, topRight.dy)
-      ..lineTo(center.dx, center.dy)
-      ..close();
-
-    final Path bottomTriangle = Path()
-      ..moveTo(center.dx, center.dy)
-      ..lineTo(bottomLeft.dx, bottomLeft.dy)
-      ..lineTo(bottomRight.dx, bottomRight.dy)
-      ..close();
-
-    final Paint outlinePaint = Paint()
-      ..color = backgroundColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 5
-      ..strokeCap = StrokeCap.round;
-
-    final Paint sandPaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-
-    final double topFillRatio = (1 - progress).clamp(0.0, 1.0);
-    final double bottomFillRatio = progress.clamp(0.0, 1.0);
-
-    canvas.save();
-    canvas.clipPath(topTriangle);
-    canvas.drawRect(
-      Rect.fromLTRB(
-        0,
-        topLeft.dy,
-        w,
-        topLeft.dy + (center.dy - topLeft.dy) * topFillRatio,
-      ),
-      sandPaint,
-    );
-    canvas.restore();
-
-    canvas.save();
-    canvas.clipPath(bottomTriangle);
-    canvas.drawRect(
-      Rect.fromLTRB(
-        0,
-        bottomRight.dy - (bottomRight.dy - center.dy) * bottomFillRatio,
-        w,
-        bottomRight.dy,
-      ),
-      sandPaint,
-    );
-    canvas.restore();
-
-    if (progress > 0 && progress < 1) {
-      final Paint linePaint = Paint()
-        ..color = color
-        ..strokeWidth = 3
-        ..strokeCap = StrokeCap.round;
-
-      canvas.drawLine(
-        Offset(center.dx, center.dy - 18),
-        Offset(center.dx, center.dy + 34),
-        linePaint,
-      );
-    }
-
-    final Path outline = Path()
-      ..moveTo(topLeft.dx, topLeft.dy)
-      ..lineTo(topRight.dx, topRight.dy)
-      ..lineTo(center.dx, center.dy)
-      ..lineTo(bottomRight.dx, bottomRight.dy)
-      ..lineTo(bottomLeft.dx, bottomLeft.dy)
-      ..lineTo(center.dx, center.dy)
-      ..lineTo(topLeft.dx, topLeft.dy);
-
-    canvas.drawPath(outline, outlinePaint);
-
-    final Paint capPaint = Paint()
-      ..color = backgroundColor
-      ..strokeWidth = 8
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawLine(topLeft, topRight, capPaint);
-    canvas.drawLine(bottomLeft, bottomRight, capPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant HourglassTimerPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.color != color ||
-        oldDelegate.backgroundColor != backgroundColor;
-  }
-}
-
-class ClockTimerPainter extends CustomPainter {
-  final double progress;
-  final Color color;
-  final Color backgroundColor;
-
-  ClockTimerPainter({
-    required this.progress,
-    required this.color,
-    required this.backgroundColor,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final Offset center = size.center(Offset.zero);
-    final double radius = size.width / 2 - 14;
-
-    final Paint circlePaint = Paint()
-      ..color = backgroundColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 8;
-
-    final Paint tickPaint = Paint()
-      ..color = backgroundColor
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round;
-
-    final Paint handPaint = Paint()
-      ..color = color
-      ..strokeWidth = 6
-      ..strokeCap = StrokeCap.round;
-
-    final Paint dotPaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-
-    canvas.drawCircle(center, radius, circlePaint);
-
-    for (int i = 0; i < 12; i++) {
-      final double angle = -pi / 2 + (2 * pi * i / 12);
-
-      final Offset p1 = Offset(
-        center.dx + cos(angle) * (radius - 12),
-        center.dy + sin(angle) * (radius - 12),
-      );
-
-      final Offset p2 = Offset(
-        center.dx + cos(angle) * radius,
-        center.dy + sin(angle) * radius,
-      );
-
-      canvas.drawLine(p1, p2, tickPaint);
-    }
-
-    final double handAngle = -pi / 2 + 2 * pi * progress;
-
-    final Offset handEnd = Offset(
-      center.dx + cos(handAngle) * (radius * 0.72),
-      center.dy + sin(handAngle) * (radius * 0.72),
-    );
-
-    canvas.drawLine(center, handEnd, handPaint);
-    canvas.drawCircle(center, 8, dotPaint);
-
-    final Rect arcRect = Rect.fromCircle(
-      center: center,
-      radius: radius,
-    );
-
-    final Paint arcPaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 8
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawArc(
-      arcRect,
-      -pi / 2,
-      2 * pi * progress,
-      false,
-      arcPaint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant ClockTimerPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.color != color ||
-        oldDelegate.backgroundColor != backgroundColor;
   }
 }
