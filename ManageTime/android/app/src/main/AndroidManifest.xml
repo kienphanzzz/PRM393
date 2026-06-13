@@ -6,6 +6,10 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <meta-data android:name="flutterEmbedding" android:value="2" />
 
     <application
         android:label="manage_time"
@@ -22,9 +26,14 @@
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
 
+
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme" />
+            <meta-data
+                android:name="com.google.android.geo.API_KEY"
+                android:value="AIzaSyD-I2IWs-wV4T0ZiIN66045Z_c9jsW6Iq8"/>
+
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

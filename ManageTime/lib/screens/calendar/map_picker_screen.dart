@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:latlong2/latlong.dart';
+
 import '../../core/constants.dart';
 import '../../main.dart';
 
@@ -25,7 +25,7 @@ class MapPickerScreen extends StatefulWidget {
 }
 
 class _MapPickerScreenState extends State<MapPickerScreen> {
-  final MapController _mapController = MapController();
+  GoogleMapController? _mapController;
 
   bool _isDark = ThemeController.isDark;
   bool _isLoading = true;
@@ -48,6 +48,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
   @override
   void dispose() {
     ThemeController.themeNotifier.removeListener(_updateTheme);
+    _mapController?.dispose();
     super.dispose();
   }
 
@@ -76,15 +77,24 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
         desiredAccuracy: LocationAccuracy.high,
       );
 
+      final currentPoint = LatLng(position.latitude, position.longitude);
+
       setState(() {
-        _selectedPoint = LatLng(position.latitude, position.longitude);
+        _selectedPoint = currentPoint;
         _isLoading = false;
       });
 
-      _mapController.move(_selectedPoint, 16);
+      _mapController?.animateCamera(
+        CameraUpdate.newLatLngZoom(currentPoint, 16),
+      );
     } catch (e) {
       setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _goToMyLocation() async {
+    setState(() => _isLoading = true);
+    await _loadDefaultLocation();
   }
 
   void _confirmLocation() {
@@ -108,7 +118,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
         backgroundColor: _isDark ? AppColors.background : Colors.white,
         elevation: 0,
         title: Text(
-          'Chọn vị trí trên bản đồ',
+          'Chọn vị trí trên Google Maps',
           style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
         ),
         leading: IconButton(
@@ -118,38 +128,48 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       ),
       body: Stack(
         children: [
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: _selectedPoint,
-              initialZoom: 15,
-              onTap: (tapPosition, point) {
-                setState(() {
-                  _selectedPoint = point;
-                });
-              },
+          GoogleMap(
+            initialCameraPosition: CameraPosition(
+              target: _selectedPoint,
+              zoom: 15,
             ),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.example.manage_time',
+            onMapCreated: (controller) {
+              _mapController = controller;
+            },
+            myLocationEnabled: true,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
+            mapToolbarEnabled: false,
+            markers: {
+              Marker(
+                markerId: const MarkerId('selected_location'),
+                position: _selectedPoint,
+                draggable: true,
+                onDragEnd: (point) {
+                  setState(() => _selectedPoint = point);
+                },
               ),
-              MarkerLayer(
-                markers: [
-                  Marker(
-                    point: _selectedPoint,
-                    width: 60,
-                    height: 60,
-                    child: const Icon(
-                      Icons.location_pin,
-                      color: Colors.redAccent,
-                      size: 46,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+            },
+            onTap: (point) {
+              setState(() => _selectedPoint = point);
+            },
           ),
+
+          Positioned(
+            right: 16,
+            top: 16,
+            child: FloatingActionButton(
+              heroTag: 'my_location_btn',
+              mini: true,
+              backgroundColor: AppColors.primary,
+              onPressed: _goToMyLocation,
+              child: const Icon(
+                Icons.my_location,
+                color: AppColors.background,
+              ),
+            ),
+          ),
+
           if (_isLoading)
             Container(
               color: Colors.black.withOpacity(0.25),
@@ -157,6 +177,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                 child: CircularProgressIndicator(color: AppColors.primary),
               ),
             ),
+
           Positioned(
             left: 16,
             right: 16,
@@ -178,7 +199,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'Chạm vào bản đồ để chọn vị trí',
+                    'Chạm bản đồ hoặc kéo pin để chọn vị trí',
                     style: TextStyle(
                       color: textColor,
                       fontWeight: FontWeight.bold,
