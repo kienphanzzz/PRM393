@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -17,7 +18,8 @@ class PomodoroTimerScreen extends StatefulWidget {
   State<PomodoroTimerScreen> createState() => _PomodoroTimerScreenState();
 }
 
-class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
+class _PomodoroTimerScreenState extends State<PomodoroTimerScreen>
+    with SingleTickerProviderStateMixin {
   String _currentMode = 'Focus';
 
   int _focusMins = 25;
@@ -32,7 +34,7 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
   bool _finishDialogShowing = false;
 
   String _selectedMusic = 'Deep Focus Lo-fi';
-  String _visualMode = 'ring';
+  String _visualMode = 'hourglass';
 
   DateTime? _sessionStartAt;
   int _pauseCount = 0;
@@ -42,6 +44,8 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
   StreamSubscription? _finishedSub;
 
   TaskModel? _selectedTask;
+
+  late final AnimationController _pulseController;
 
   final List<String> _musicList = [
     'Deep Focus Lo-fi',
@@ -55,6 +59,13 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
   @override
   void initState() {
     super.initState();
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+      lowerBound: 0.96,
+      upperBound: 1.04,
+    )..repeat(reverse: true);
 
     _loadSettings();
     _listenService();
@@ -87,7 +98,11 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
       _focusMins = prefs.getInt('pomo_focus') ?? 25;
       _shortMins = prefs.getInt('pomo_short') ?? 5;
       _longMins = prefs.getInt('pomo_long') ?? 15;
-      _visualMode = prefs.getString('pomo_visual_mode') ?? 'ring';
+      _visualMode = prefs.getString('pomo_visual_mode') ?? 'hourglass';
+
+      if (_visualMode == 'ring' || _visualMode == 'minimal') {
+        _visualMode = 'hourglass';
+      }
 
       if (!_isRunning) {
         _secondsRemaining = _getModeSeconds();
@@ -139,7 +154,7 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
 
     final double value = _elapsedSeconds() / _sessionTargetSeconds;
 
-    return value.clamp(0.0, 1.0);
+    return value.clamp(0.0, 1.0).toDouble();
   }
 
   String _formatTimer(int seconds) {
@@ -433,7 +448,8 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
   Future<void> _handleResetPressed() async {
     final bool allowed = await _confirmInterruptAction(
       title: 'Reset phiên hiện tại?',
-      content: 'Pomodoro đang chạy.\nReset sẽ dừng phiên hiện tại và không lưu dữ liệu.',
+      content:
+      'Pomodoro đang chạy.\nReset sẽ dừng phiên hiện tại và không lưu dữ liệu.',
       confirmText: 'Reset',
     );
 
@@ -467,7 +483,8 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
 
     final bool allowed = await _confirmInterruptAction(
       title: 'Đổi chế độ Pomodoro?',
-      content: 'Phiên hiện tại đang chạy.\nĐổi chế độ sẽ dừng phiên này và không lưu dữ liệu.',
+      content:
+      'Phiên hiện tại đang chạy.\nĐổi chế độ sẽ dừng phiên này và không lưu dữ liệu.',
       confirmText: 'Đổi',
     );
 
@@ -560,7 +577,7 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
       score -= 5;
     }
 
-    return score.clamp(0, 100);
+    return score.clamp(0, 100).toInt();
   }
 
   String _scoreLabel(int score) {
@@ -1105,12 +1122,10 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
                       title: Text(
                         music,
                         style: TextStyle(
-                          color: isSelected
-                              ? AppColors.primary
-                              : Colors.white70,
-                          fontWeight: isSelected
-                              ? FontWeight.bold
-                              : FontWeight.normal,
+                          color:
+                          isSelected ? AppColors.primary : Colors.white70,
+                          fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.normal,
                         ),
                       ),
                       trailing: isSelected
@@ -1197,6 +1212,7 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
     _updateSub?.cancel();
     _finishedSub?.cancel();
     _stopCheckTimer?.cancel();
+    _pulseController.dispose();
 
     ThemeController.themeNotifier.removeListener(_rebuild);
 
@@ -1325,65 +1341,9 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
                       ),
                     ),
                     const SizedBox(height: 26),
-                    SizedBox(
-                      width: 250,
-                      height: 250,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          SizedBox(
-                            width: 245,
-                            height: 245,
-                            child: CircularProgressIndicator(
-                              value: _progressValue(),
-                              strokeWidth: 14,
-                              backgroundColor:
-                              AppColors.textMuted.withOpacity(0.18),
-                              valueColor: const AlwaysStoppedAnimation<Color>(
-                                AppColors.primary,
-                              ),
-                            ),
-                          ),
-                          Container(
-                            width: 205,
-                            height: 205,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: AppColors.primary.withOpacity(0.06),
-                              border: Border.all(
-                                color: AppColors.primary.withOpacity(0.2),
-                              ),
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  _formatTimer(_secondsRemaining),
-                                  style: TextStyle(
-                                    color: textColor,
-                                    fontSize: 46,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: -1,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  _isRunning
-                                      ? 'Đang chạy'
-                                      : _secondsRemaining == _getModeSeconds()
-                                      ? 'Sẵn sàng'
-                                      : 'Đang tạm dừng',
-                                  style: TextStyle(
-                                    color: subTextColor,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                    _buildTimerVisual(
+                      textColor: textColor,
+                      subTextColor: subTextColor,
                     ),
                     const SizedBox(height: 24),
                     Row(
@@ -1546,17 +1506,17 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
                       children: [
                         Expanded(
                           child: _buildVisualModeChip(
-                            label: 'Ring',
-                            value: 'ring',
-                            icon: Icons.donut_large_rounded,
+                            label: 'Đồng hồ cát',
+                            value: 'hourglass',
+                            icon: Icons.hourglass_bottom_rounded,
                           ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: _buildVisualModeChip(
-                            label: 'Minimal',
-                            value: 'minimal',
-                            icon: Icons.center_focus_strong_rounded,
+                            label: 'Đồng hồ xoay',
+                            value: 'clock',
+                            icon: Icons.watch_later_rounded,
                           ),
                         ),
                       ],
@@ -1593,6 +1553,338 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildTimerVisual({
+    required Color textColor,
+    required Color subTextColor,
+  }) {
+    if (_visualMode == 'clock') {
+      return _buildRotatingClockVisual(
+        textColor: textColor,
+        subTextColor: subTextColor,
+      );
+    }
+
+    return _buildHourglassVisual(
+      textColor: textColor,
+      subTextColor: subTextColor,
+    );
+  }
+
+  Widget _buildHourglassVisual({
+    required Color textColor,
+    required Color subTextColor,
+  }) {
+    final double progress = _progressValue();
+
+    return SizedBox(
+      width: 260,
+      height: 260,
+      child: AnimatedBuilder(
+        animation: _pulseController,
+        builder: (context, child) {
+          final double scale = _isRunning ? _pulseController.value : 1.0;
+
+          return Transform.scale(
+            scale: scale,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  width: 252,
+                  height: 252,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.primary.withOpacity(0.04),
+                    border: Border.all(
+                      color: AppColors.primary.withOpacity(0.22),
+                      width: 2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withOpacity(
+                          _isRunning ? 0.22 : 0.08,
+                        ),
+                        blurRadius: _isRunning ? 34 : 18,
+                        spreadRadius: _isRunning ? 2 : 0,
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(
+                  width: 252,
+                  height: 252,
+                  child: CircularProgressIndicator(
+                    value: progress,
+                    strokeWidth: 10,
+                    backgroundColor: AppColors.textMuted.withOpacity(0.14),
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      AppColors.primary,
+                    ),
+                  ),
+                ),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 82,
+                      height: 104,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Positioned(
+                            top: 0,
+                            child: ClipPath(
+                              clipper: _TopHourglassClipper(),
+                              child: Container(
+                                width: 82,
+                                height: 51,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.08),
+                                  border: Border.all(
+                                    color: AppColors.primary.withOpacity(0.95),
+                                    width: 2,
+                                  ),
+                                ),
+                                child: Align(
+                                  alignment: Alignment.bottomCenter,
+                                  child: FractionallySizedBox(
+                                    heightFactor:
+                                    (1 - progress).clamp(0.0, 1.0),
+                                    alignment: Alignment.bottomCenter,
+                                    child: Container(
+                                      color: Colors.amber.withOpacity(0.95),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            child: ClipPath(
+                              clipper: _BottomHourglassClipper(),
+                              child: Container(
+                                width: 82,
+                                height: 51,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.08),
+                                  border: Border.all(
+                                    color: AppColors.primary.withOpacity(0.95),
+                                    width: 2,
+                                  ),
+                                ),
+                                child: Align(
+                                  alignment: Alignment.bottomCenter,
+                                  child: FractionallySizedBox(
+                                    heightFactor: progress.clamp(0.0, 1.0),
+                                    alignment: Alignment.bottomCenter,
+                                    child: Container(
+                                      color: Colors.amber.withOpacity(0.95),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (_isRunning)
+                            Positioned(
+                              top: 48,
+                              child: Container(
+                                width: 4,
+                                height: 20,
+                                decoration: BoxDecoration(
+                                  color: Colors.amber,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 13),
+                    Text(
+                      _formatTimer(_secondsRemaining),
+                      style: TextStyle(
+                        color: textColor,
+                        fontSize: 40,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: -1,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      _isRunning
+                          ? 'Cát đang chảy theo thời gian'
+                          : _secondsRemaining == _getModeSeconds()
+                          ? 'Sẵn sàng bắt đầu'
+                          : 'Đang tạm dừng',
+                      style: TextStyle(
+                        color: subTextColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildRotatingClockVisual({
+    required Color textColor,
+    required Color subTextColor,
+  }) {
+    final double progress = _progressValue();
+
+    return SizedBox(
+      width: 260,
+      height: 260,
+      child: AnimatedBuilder(
+        animation: _pulseController,
+        builder: (context, child) {
+          final double pulse = _isRunning ? _pulseController.value : 1.0;
+          final double angle = progress * 2 * pi;
+
+          return Transform.scale(
+            scale: pulse,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  width: 252,
+                  height: 252,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.primary.withOpacity(0.04),
+                    border: Border.all(
+                      color: AppColors.primary.withOpacity(0.25),
+                      width: 2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withOpacity(
+                          _isRunning ? 0.25 : 0.08,
+                        ),
+                        blurRadius: _isRunning ? 36 : 18,
+                        spreadRadius: _isRunning ? 2 : 0,
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(
+                  width: 252,
+                  height: 252,
+                  child: CircularProgressIndicator(
+                    value: progress,
+                    strokeWidth: 10,
+                    backgroundColor: AppColors.textMuted.withOpacity(0.14),
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      AppColors.primary,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 34,
+                  child: Container(
+                    width: 122,
+                    height: 122,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withOpacity(0.05),
+                      border: Border.all(
+                        color: AppColors.primary.withOpacity(0.75),
+                        width: 2,
+                      ),
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        for (int i = 0; i < 12; i++)
+                          Transform.rotate(
+                            angle: i * pi / 6,
+                            child: Align(
+                              alignment: Alignment.topCenter,
+                              child: Container(
+                                margin: const EdgeInsets.only(top: 8),
+                                width: i % 3 == 0 ? 4 : 2,
+                                height: i % 3 == 0 ? 12 : 8,
+                                decoration: BoxDecoration(
+                                  color: i % 3 == 0
+                                      ? AppColors.primary
+                                      : AppColors.textMuted,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ),
+                        Transform.rotate(
+                          angle: angle,
+                          child: Align(
+                            alignment: Alignment.topCenter,
+                            child: Container(
+                              width: 4,
+                              height: 48,
+                              margin: const EdgeInsets.only(top: 15),
+                              decoration: BoxDecoration(
+                                color: Colors.amber,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Container(
+                          width: 12,
+                          height: 12,
+                          decoration: const BoxDecoration(
+                            color: AppColors.primary,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: 42,
+                  child: Column(
+                    children: [
+                      Text(
+                        _formatTimer(_secondsRemaining),
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 38,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: -1,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _isRunning
+                            ? 'Kim đồng hồ đang xoay'
+                            : _secondsRemaining == _getModeSeconds()
+                            ? 'Sẵn sàng bắt đầu'
+                            : 'Đang tạm dừng',
+                        style: TextStyle(
+                          color: subTextColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -1665,7 +1957,7 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(
-          horizontal: 12,
+          horizontal: 8,
           vertical: 12,
         ),
         decoration: BoxDecoration(
@@ -1685,18 +1977,61 @@ class _PomodoroTimerScreenState extends State<PomodoroTimerScreen> {
               color: selected ? AppColors.primary : AppColors.textMuted,
               size: 18,
             ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: selected ? AppColors.primary : AppColors.textMuted,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: selected ? AppColors.primary : AppColors.textMuted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],
         ),
       ),
     );
+  }
+}
+
+class _TopHourglassClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+
+    path.moveTo(0, 0);
+    path.lineTo(size.width, 0);
+    path.lineTo(size.width * 0.56, size.height);
+    path.lineTo(size.width * 0.44, size.height);
+    path.close();
+
+    return path;
+  }
+
+  @override
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) {
+    return false;
+  }
+}
+
+class _BottomHourglassClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+
+    path.moveTo(size.width * 0.44, 0);
+    path.lineTo(size.width * 0.56, 0);
+    path.lineTo(size.width, size.height);
+    path.lineTo(0, size.height);
+    path.close();
+
+    return path;
+  }
+
+  @override
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) {
+    return false;
   }
 }

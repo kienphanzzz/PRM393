@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "486649946055",
+    "project_id": "managetime-afa9a",
+    "storage_bucket": "managetime-afa9a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:486649946055:android:7ed0c8f313e31b67c1c3e2",
+        "android_client_info": {
+          "package_name": "com.example.manage_time"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "486649946055-36aq3r6bif9724aoahki040jh24henee.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.manage_time",
+            "certificate_hash": "9e94bc1a821fdfa5f4b745eea6c931eafcace6b1"
+          }
+        },
+        {
+          "client_id": "486649946055-ip7tbhlvqq0mv489k3ioci89oqk3bato.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBYIPK0mYa97HwXc6vijJt7ANTt4sI-sMo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "486649946055-ip7tbhlvqq0mv489k3ioci89oqk3bato.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+
 import '../../core/constants.dart';
 import '../../main.dart';
 
@@ -19,11 +20,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _otpController = TextEditingController();
 
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isDark = ThemeController.isDark;
+
+  final String baseUrl = 'http://10.0.2.2:3000';
 
   @override
   void initState() {
@@ -32,7 +36,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _updateTheme() {
-    if (mounted) setState(() => _isDark = ThemeController.themeNotifier.value);
+    if (mounted) {
+      setState(() => _isDark = ThemeController.themeNotifier.value);
+    }
   }
 
   @override
@@ -42,6 +48,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _otpController.dispose();
     ThemeController.themeNotifier.removeListener(_updateTheme);
     super.dispose();
   }
@@ -50,9 +57,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
+
     try {
-      final response = await http.post(
-        Uri.parse('http://10.0.2.2:3000/api/register'),
+      final response = await http
+          .post(
+        Uri.parse('$baseUrl/api/register'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'fullName': _fullNameController.text.trim(),
@@ -60,16 +69,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
           'phone': _phoneController.text.trim(),
           'password': _passwordController.text.trim(),
         }),
-      );
+      )
+          .timeout(const Duration(seconds: 10));
 
       final data = jsonDecode(response.body);
 
       if (!mounted) return;
 
-      if (response.statusCode == 201 || (response.statusCode == 200 && data['success'] == true)) {
-        _showSuccessDialog('Đăng ký thành công!', 'Tài khoản của bạn đã được khởi tạo trên hệ thống.');
+      if (response.statusCode == 200 && data['success'] == true) {
+        _showInfoSnackBar(data['message']?.toString() ?? 'Đã gửi OTP về Gmail!');
+        _showVerifyOtpDialog();
       } else {
-        _showErrorSnackBar(data['message']?.toString() ?? 'Đăng ký thất bại, vui lòng thử lại!');
+        _showErrorSnackBar(data['message']?.toString() ?? 'Đăng ký thất bại!');
       }
     } catch (e) {
       if (!mounted) return;
@@ -79,9 +90,136 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
+  void _showVerifyOtpDialog() {
+    _otpController.clear();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        bool dialogLoading = false;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> verifyOtp() async {
+              final otp = _otpController.text.trim();
+
+              if (otp.isEmpty) {
+                _showErrorSnackBar('Vui lòng nhập mã OTP!');
+                return;
+              }
+
+              setDialogState(() => dialogLoading = true);
+
+              try {
+                final response = await http
+                    .post(
+                  Uri.parse('$baseUrl/api/verify-register-otp'),
+                  headers: {'Content-Type': 'application/json'},
+                  body: jsonEncode({
+                    'email': _emailController.text.trim(),
+                    'otp': otp,
+                  }),
+                )
+                    .timeout(const Duration(seconds: 10));
+
+                final data = jsonDecode(response.body);
+
+                if (response.statusCode == 201 && data['success'] == true) {
+                  if (!mounted) return;
+                  Navigator.pop(dialogContext);
+                  _showSuccessDialog(
+                    'Đăng ký thành công!',
+                    'Email đã được xác minh. Bạn có thể đăng nhập ngay.',
+                  );
+                } else {
+                  _showErrorSnackBar(data['message']?.toString() ?? 'Xác minh OTP thất bại!');
+                }
+              } catch (e) {
+                _showErrorSnackBar('Không thể kết nối server để xác minh OTP!');
+              } finally {
+                setDialogState(() => dialogLoading = false);
+              }
+            }
+
+            return AlertDialog(
+              backgroundColor: _isDark ? AppColors.cardBg : Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Text(
+                'Xác minh Gmail',
+                style: TextStyle(
+                  color: _isDark ? Colors.white : Colors.black87,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Mã OTP đã được gửi về Gmail:\n${_emailController.text.trim()}',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: _isDark ? Colors.white70 : Colors.black54,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _otpController,
+                    keyboardType: TextInputType.number,
+                    style: TextStyle(color: _isDark ? Colors.white : Colors.black87),
+                    decoration: const InputDecoration(
+                      labelText: 'Nhập mã OTP 6 số',
+                      prefixIcon: Icon(Icons.mark_email_read_outlined),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: dialogLoading ? null : () => Navigator.pop(dialogContext),
+                  child: const Text(
+                    'Hủy',
+                    style: TextStyle(color: AppColors.textMuted),
+                  ),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                  onPressed: dialogLoading ? null : verifyOtp,
+                  child: dialogLoading
+                      ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                      : const Text(
+                    'Xác minh',
+                    style: TextStyle(
+                      color: AppColors.background,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(backgroundColor: Colors.redAccent, content: Text(message)),
+    );
+  }
+
+  void _showInfoSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(backgroundColor: AppColors.primary, content: Text(message)),
     );
   }
 
@@ -90,16 +228,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: _isDark ? AppColors.cardBg : Colors.white,
-        title: Text(title, style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-        content: Text(content, style: TextStyle(color: _isDark ? Colors.white70 : Colors.black54)),
+        title: Text(
+          title,
+          style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          content,
+          style: TextStyle(color: _isDark ? Colors.white70 : Colors.black54),
+        ),
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.pop(context); // Đóng dialog
-              Navigator.pop(context); // Quay lại màn hình đăng nhập
+              Navigator.pop(context);
+              Navigator.pop(context);
             },
-            child: const Text('Đăng nhập ngay', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
-          )
+            child: const Text(
+              'Đăng nhập ngay',
+              style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+            ),
+          ),
         ],
       ),
     );
@@ -128,7 +275,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
             children: [
               Text(
                 'Create Account',
-                style: TextStyle(color: textColor, fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: -0.5),
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: -0.5,
+                ),
               ),
               const SizedBox(height: 8),
               const Text(
@@ -146,7 +298,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       color: Colors.black.withValues(alpha: _isDark ? 0.3 : 0.05),
                       blurRadius: 20,
                       offset: const Offset(0, 10),
-                    )
+                    ),
                   ],
                 ),
                 child: Form(
@@ -154,7 +306,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Full Name', style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.w500)),
+                      Text(
+                        'Full Name',
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: _fullNameController,
@@ -163,24 +322,45 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           hintText: 'Nhập họ và tên của bạn',
                           prefixIcon: Icon(Icons.person_outline),
                         ),
-                        validator: (value) => (value == null || value.trim().isEmpty) ? 'Vui lòng nhập Họ và tên' : null,
+                        validator: (value) {
+                          return (value == null || value.trim().isEmpty)
+                              ? 'Vui lòng nhập Họ và tên'
+                              : null;
+                        },
                       ),
                       const SizedBox(height: 16),
-
-                      Text('Email Address', style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.w500)),
+                      Text(
+                        'Email Address',
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: _emailController,
                         style: TextStyle(color: textColor),
+                        keyboardType: TextInputType.emailAddress,
                         decoration: const InputDecoration(
                           hintText: 'E.g., kien@gmail.com',
                           prefixIcon: Icon(Icons.email_outlined),
                         ),
-                        validator: (value) => (value == null || !value.contains('@')) ? 'Vui lòng nhập Email hợp lệ' : null,
+                        validator: (value) {
+                          return (value == null || !value.contains('@'))
+                              ? 'Vui lòng nhập Email hợp lệ'
+                              : null;
+                        },
                       ),
                       const SizedBox(height: 16),
-
-                      Text('Phone Number', style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.w500)),
+                      Text(
+                        'Phone Number',
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: _phoneController,
@@ -190,11 +370,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           hintText: 'Nhập số điện thoại liên hệ',
                           prefixIcon: Icon(Icons.phone_android_outlined),
                         ),
-                        validator: (value) => (value == null || value.length < 10) ? 'Số điện thoại không hợp lệ' : null,
+                        validator: (value) {
+                          return (value == null || value.length < 10)
+                              ? 'Số điện thoại không hợp lệ'
+                              : null;
+                        },
                       ),
                       const SizedBox(height: 16),
-
-                      Text('Password', style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.w500)),
+                      Text(
+                        'Password',
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: _passwordController,
@@ -204,15 +394,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           hintText: 'Tạo mật khẩu bảo mật',
                           prefixIcon: const Icon(Icons.lock_outline),
                           suffixIcon: IconButton(
-                            icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: AppColors.textMuted),
-                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                            icon: Icon(
+                              _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                              color: AppColors.textMuted,
+                            ),
+                            onPressed: () {
+                              setState(() => _obscurePassword = !_obscurePassword);
+                            },
                           ),
                         ),
-                        validator: (value) => (value == null || value.length < 6) ? 'Mật khẩu phải từ 6 ký tự trở lên' : null,
+                        validator: (value) {
+                          return (value == null || value.length < 6)
+                              ? 'Mật khẩu phải từ 6 ký tự trở lên'
+                              : null;
+                        },
                       ),
                       const SizedBox(height: 16),
-
-                      Text('Confirm Password', style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.w500)),
+                      Text(
+                        'Confirm Password',
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: _confirmPasswordController,
@@ -222,8 +427,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           hintText: 'Nhập lại mật khẩu phía trên',
                           prefixIcon: const Icon(Icons.lock_reset_outlined),
                           suffixIcon: IconButton(
-                            icon: Icon(_obscureConfirmPassword ? Icons.visibility_off : Icons.visibility, color: AppColors.textMuted),
-                            onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                            icon: Icon(
+                              _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
+                              color: AppColors.textMuted,
+                            ),
+                            onPressed: () {
+                              setState(() => _obscureConfirmPassword = !_obscureConfirmPassword);
+                            },
                           ),
                         ),
                         validator: (value) {
@@ -234,7 +444,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         },
                       ),
                       const SizedBox(height: 28),
-
                       SizedBox(
                         width: double.infinity,
                         height: 52,
@@ -245,8 +454,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                           onPressed: _isLoading ? null : _handleRegister,
                           child: _isLoading
-                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                              : const Text('Sign Up Now', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                              ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                              : const Text(
+                            'Sign Up Now',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
                         ),
                       ),
                     ],
