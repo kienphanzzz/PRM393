@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants.dart';
 import '../../main.dart';
 import '../../data/models/event_model.dart';
+import 'map_picker_screen.dart';
 
 class EventDetailScreen extends StatefulWidget {
   final EventModel? event;
@@ -192,6 +193,20 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         } else {
           _endTime = picked;
         }
+      });
+    }
+  }
+  Future<void> _openMapPicker() async {
+    final result = await Navigator.push<MapPickerResult>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const MapPickerScreen(),
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _locationController.text = result.addressText;
       });
     }
   }
@@ -415,12 +430,37 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
               ),
             const SizedBox(height: 20),
             _buildLabel('Vị trí', textColor),
-            _buildTextField(
-              _locationController,
-              'Địa điểm hoặc Link meeting',
-              cardBg,
-              textColor,
-              icon: Icons.location_on_outlined,
+            Row(
+              children: [
+                Expanded(
+                  child: _buildTextField(
+                    _locationController,
+                    'Địa điểm hoặc Link meeting',
+                    cardBg,
+                    textColor,
+                    icon: Icons.location_on_outlined,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                SizedBox(
+                  height: 54,
+                  width: 54,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      padding: EdgeInsets.zero,
+                    ),
+                    onPressed: _openMapPicker,
+                    child: const Icon(
+                      Icons.map_outlined,
+                      color: AppColors.background,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 20),
             Row(

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
-
 import '../../core/constants.dart';
+import '../../main.dart';
 
 class MapPickerResult {
   final double latitude;
@@ -27,6 +27,7 @@ class MapPickerScreen extends StatefulWidget {
 class _MapPickerScreenState extends State<MapPickerScreen> {
   final MapController _mapController = MapController();
 
+  bool _isDark = ThemeController.isDark;
   bool _isLoading = true;
 
   LatLng _selectedPoint = const LatLng(21.0136, 105.5259);
@@ -34,7 +35,20 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
   @override
   void initState() {
     super.initState();
+    ThemeController.themeNotifier.addListener(_updateTheme);
     _loadDefaultLocation();
+  }
+
+  void _updateTheme() {
+    if (mounted) {
+      setState(() => _isDark = ThemeController.isDark);
+    }
+  }
+
+  @override
+  void dispose() {
+    ThemeController.themeNotifier.removeListener(_updateTheme);
+    super.dispose();
   }
 
   Future<void> _loadDefaultLocation() async {
@@ -86,24 +100,19 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const backgroundColor = AppColors.background;
-    const cardColor = AppColors.cardBg;
-    const textColor = Colors.white;
+    final textColor = _isDark ? Colors.white : Colors.black87;
 
     return Scaffold(
-      backgroundColor: backgroundColor,
+      backgroundColor: _isDark ? AppColors.background : const Color(0xFFF8F9FA),
       appBar: AppBar(
-        backgroundColor: backgroundColor,
+        backgroundColor: _isDark ? AppColors.background : Colors.white,
         elevation: 0,
-        title: const Text(
+        title: Text(
           'Chọn vị trí trên bản đồ',
-          style: TextStyle(
-            color: textColor,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: textColor),
+          icon: Icon(Icons.arrow_back, color: textColor),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -155,7 +164,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: cardColor,
+                color: _isDark ? AppColors.cardBg : Colors.white,
                 borderRadius: BorderRadius.circular(18),
                 boxShadow: [
                   BoxShadow(
@@ -168,7 +177,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
+                  Text(
                     'Chạm vào bản đồ để chọn vị trí',
                     style: TextStyle(
                       color: textColor,
@@ -195,10 +204,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                         ),
                       ),
                       onPressed: _confirmLocation,
-                      icon: const Icon(
-                        Icons.check,
-                        color: AppColors.background,
-                      ),
+                      icon: const Icon(Icons.check, color: AppColors.background),
                       label: const Text(
                         'Chọn vị trí này',
                         style: TextStyle(
