@@ -29,6 +29,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
   bool _isDark = ThemeController.isDark;
   bool _isLoading = true;
+  bool _hasLocationPermission = false;
 
   LatLng _selectedPoint = const LatLng(21.0136, 105.5259);
 
@@ -40,9 +41,10 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
   }
 
   void _updateTheme() {
-    if (mounted) {
-      setState(() => _isDark = ThemeController.isDark);
-    }
+    if (!mounted) return;
+    setState(() {
+      _isDark = ThemeController.isDark;
+    });
   }
 
   @override
@@ -54,10 +56,14 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
   Future<void> _loadDefaultLocation() async {
     try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
 
       if (!serviceEnabled) {
-        setState(() => _isLoading = false);
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+          _hasLocationPermission = false;
+        });
         return;
       }
 
@@ -69,7 +75,11 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
-        setState(() => _isLoading = false);
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+          _hasLocationPermission = false;
+        });
         return;
       }
 
@@ -79,21 +89,28 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
       final currentPoint = LatLng(position.latitude, position.longitude);
 
+      if (!mounted) return;
       setState(() {
         _selectedPoint = currentPoint;
         _isLoading = false;
+        _hasLocationPermission = true;
       });
 
-      _mapController?.animateCamera(
+      await _mapController?.animateCamera(
         CameraUpdate.newLatLngZoom(currentPoint, 16),
       );
-    } catch (e) {
-      setState(() => _isLoading = false);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
   Future<void> _goToMyLocation() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+    });
     await _loadDefaultLocation();
   }
 
@@ -119,7 +136,10 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
         elevation: 0,
         title: Text(
           'Chọn vị trí trên Google Maps',
-          style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: textColor,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: textColor),
@@ -128,31 +148,41 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       ),
       body: Stack(
         children: [
-          GoogleMap(
-            initialCameraPosition: CameraPosition(
-              target: _selectedPoint,
-              zoom: 15,
-            ),
-            onMapCreated: (controller) {
-              _mapController = controller;
-            },
-            myLocationEnabled: true,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            mapToolbarEnabled: false,
-            markers: {
-              Marker(
-                markerId: const MarkerId('selected_location'),
-                position: _selectedPoint,
-                draggable: true,
-                onDragEnd: (point) {
-                  setState(() => _selectedPoint = point);
-                },
+          Positioned.fill(
+            child: GoogleMap(
+              initialCameraPosition: CameraPosition(
+                target: _selectedPoint,
+                zoom: 15,
               ),
-            },
-            onTap: (point) {
-              setState(() => _selectedPoint = point);
-            },
+              onMapCreated: (controller) async {
+                _mapController = controller;
+                await _mapController?.animateCamera(
+                  CameraUpdate.newLatLngZoom(_selectedPoint, 15),
+                );
+              },
+              mapType: MapType.normal,
+              myLocationEnabled: _hasLocationPermission,
+              myLocationButtonEnabled: false,
+              zoomControlsEnabled: false,
+              mapToolbarEnabled: false,
+              markers: {
+                Marker(
+                  markerId: const MarkerId('selected_location'),
+                  position: _selectedPoint,
+                  draggable: true,
+                  onDragEnd: (point) {
+                    setState(() {
+                      _selectedPoint = point;
+                    });
+                  },
+                ),
+              },
+              onTap: (point) {
+                setState(() {
+                  _selectedPoint = point;
+                });
+              },
+            ),
           ),
 
           Positioned(
@@ -225,7 +255,10 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                         ),
                       ),
                       onPressed: _confirmLocation,
-                      icon: const Icon(Icons.check, color: AppColors.background),
+                      icon: const Icon(
+                        Icons.check,
+                        color: AppColors.background,
+                      ),
                       label: const Text(
                         'Chọn vị trí này',
                         style: TextStyle(
