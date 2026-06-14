@@ -29,8 +29,9 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
   bool _isDark = ThemeController.isDark;
   bool _isLoading = true;
-  bool _hasLocationPermission = false;
+  bool _canShowMyLocation = false;
 
+  // Vị trí mặc định: FPT / Hòa Lạc
   LatLng _selectedPoint = const LatLng(21.0136, 105.5259);
 
   @override
@@ -41,10 +42,11 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
   }
 
   void _updateTheme() {
-    if (!mounted) return;
-    setState(() {
-      _isDark = ThemeController.isDark;
-    });
+    if (mounted) {
+      setState(() {
+        _isDark = ThemeController.isDark;
+      });
+    }
   }
 
   @override
@@ -56,14 +58,18 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
   Future<void> _loadDefaultLocation() async {
     try {
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
 
       if (!serviceEnabled) {
         if (!mounted) return;
+
         setState(() {
+          _selectedPoint = const LatLng(21.0136, 105.5259);
           _isLoading = false;
-          _hasLocationPermission = false;
+          _canShowMyLocation = false;
         });
+
+        await _moveCamera(_selectedPoint);
         return;
       }
 
@@ -76,41 +82,70 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
         if (!mounted) return;
+
         setState(() {
+          _selectedPoint = const LatLng(21.0136, 105.5259);
           _isLoading = false;
-          _hasLocationPermission = false;
+          _canShowMyLocation = false;
         });
+
+        await _moveCamera(_selectedPoint);
         return;
       }
 
-      final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+      final Position position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
 
-      final currentPoint = LatLng(position.latitude, position.longitude);
+      LatLng currentPoint = LatLng(position.latitude, position.longitude);
+
+      // Android Emulator hay trả về vị trí mặc định Googleplex bên Mỹ.
+      // Nếu gặp tọa độ đó thì tự đổi về FPT/Hòa Lạc.
+      final bool isEmulatorGooglePlex =
+          (position.latitude - 37.421998).abs() < 0.01 &&
+              (position.longitude + 122.084000).abs() < 0.01;
+
+      if (isEmulatorGooglePlex) {
+        currentPoint = const LatLng(21.0136, 105.5259);
+      }
 
       if (!mounted) return;
+
       setState(() {
         _selectedPoint = currentPoint;
         _isLoading = false;
-        _hasLocationPermission = true;
+        _canShowMyLocation = true;
       });
 
-      await _mapController?.animateCamera(
-        CameraUpdate.newLatLngZoom(currentPoint, 16),
-      );
-    } catch (_) {
+      await _moveCamera(currentPoint);
+    } catch (e) {
       if (!mounted) return;
+
       setState(() {
+        _selectedPoint = const LatLng(21.0136, 105.5259);
         _isLoading = false;
+        _canShowMyLocation = false;
       });
+
+      await _moveCamera(_selectedPoint);
     }
   }
 
+  Future<void> _moveCamera(LatLng point) async {
+    await _mapController?.animateCamera(
+      CameraUpdate.newLatLngZoom(point, 16),
+    );
+  }
+
   Future<void> _goToMyLocation() async {
+    if (!mounted) return;
+
     setState(() {
       _isLoading = true;
     });
+
     await _loadDefaultLocation();
   }
 
@@ -148,41 +183,36 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       ),
       body: Stack(
         children: [
-          Positioned.fill(
-            child: GoogleMap(
-              initialCameraPosition: CameraPosition(
-                target: _selectedPoint,
-                zoom: 15,
-              ),
-              onMapCreated: (controller) async {
-                _mapController = controller;
-                await _mapController?.animateCamera(
-                  CameraUpdate.newLatLngZoom(_selectedPoint, 15),
-                );
-              },
-              mapType: MapType.normal,
-              myLocationEnabled: _hasLocationPermission,
-              myLocationButtonEnabled: false,
-              zoomControlsEnabled: false,
-              mapToolbarEnabled: false,
-              markers: {
-                Marker(
-                  markerId: const MarkerId('selected_location'),
-                  position: _selectedPoint,
-                  draggable: true,
-                  onDragEnd: (point) {
-                    setState(() {
-                      _selectedPoint = point;
-                    });
-                  },
-                ),
-              },
-              onTap: (point) {
-                setState(() {
-                  _selectedPoint = point;
-                });
-              },
+          GoogleMap(
+            initialCameraPosition: CameraPosition(
+              target: _selectedPoint,
+              zoom: 16,
             ),
+            onMapCreated: (controller) async {
+              _mapController = controller;
+              await _moveCamera(_selectedPoint);
+            },
+            myLocationEnabled: _canShowMyLocation,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: true,
+            mapToolbarEnabled: false,
+            markers: {
+              Marker(
+                markerId: const MarkerId('selected_location'),
+                position: _selectedPoint,
+                draggable: true,
+                onDragEnd: (point) {
+                  setState(() {
+                    _selectedPoint = point;
+                  });
+                },
+              ),
+            },
+            onTap: (point) {
+              setState(() {
+                _selectedPoint = point;
+              });
+            },
           ),
 
           Positioned(
@@ -204,7 +234,9 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             Container(
               color: Colors.black.withOpacity(0.25),
               child: const Center(
-                child: CircularProgressIndicator(color: AppColors.primary),
+                child: CircularProgressIndicator(
+                  color: AppColors.primary,
+                ),
               ),
             ),
 
