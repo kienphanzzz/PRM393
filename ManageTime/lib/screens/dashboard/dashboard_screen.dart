@@ -25,7 +25,7 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  int _currentIndex = 2; // Default to Home
+  int _currentIndex = 2;
   String _currentUserName = 'User';
   bool _isDark = ThemeController.isDark;
   Timer? _deepLinkTimer;

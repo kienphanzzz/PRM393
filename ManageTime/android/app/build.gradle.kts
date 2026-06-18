@@ -11,7 +11,6 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        // KÍCH HOẠT ĐỒNG BỘ NGƯỢC THƯ VIỆN LÕI JAVA CHO KOTLIN DSL
         isCoreLibraryDesugaringEnabled = true
 
         sourceCompatibility = JavaVersion.VERSION_1_8
@@ -41,7 +40,7 @@ flutter {
     source = "../.."
 }
 
-// THÊM ĐOẠN NÀY DƯỚI CÙNG ĐỂ NẠP BỘ GIẢI MÃ DESUGAR CHO KOTLIN DSL
+
 dependencies {
     "coreLibraryDesugaring"("com.android.tools:desugar_jdk_libs:2.0.4")
 }

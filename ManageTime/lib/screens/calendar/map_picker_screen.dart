@@ -31,7 +31,6 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
   bool _isLoading = true;
   bool _canShowMyLocation = false;
 
-  // Vị trí mặc định: FPT / Hòa Lạc
   LatLng _selectedPoint = const LatLng(21.0136, 105.5259);
 
   @override
@@ -101,15 +100,14 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
       LatLng currentPoint = LatLng(position.latitude, position.longitude);
 
-      // Android Emulator hay trả về vị trí mặc định Googleplex bên Mỹ.
-      // Nếu gặp tọa độ đó thì tự đổi về FPT/Hòa Lạc.
-      final bool isEmulatorGooglePlex =
-          (position.latitude - 37.421998).abs() < 0.01 &&
-              (position.longitude + 122.084000).abs() < 0.01;
+      //
+      // final bool isEmulatorGooglePlex =
+      //     (position.latitude - 37.421998).abs() < 0.01 &&
+      //         (position.longitude + 122.084000).abs() < 0.01;
 
-      if (isEmulatorGooglePlex) {
-        currentPoint = const LatLng(21.0136, 105.5259);
-      }
+      // if (isEmulatorGooglePlex) {
+      //   currentPoint = const LatLng(21.0136, 105.5259);
+      // }
 
       if (!mounted) return;
 

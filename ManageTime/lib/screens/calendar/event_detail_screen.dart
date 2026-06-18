@@ -10,8 +10,6 @@ import 'map_picker_screen.dart';
 class EventDetailScreen extends StatefulWidget {
   final EventModel? event;
   final VoidCallback onEventUpdated;
-
-  // Thêm optional initialDate để sau này Calendar truyền ngày đang chọn vào được
   final DateTime? initialDate;
 
   const EventDetailScreen({
