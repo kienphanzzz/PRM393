@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 
 import '../../core/constants.dart';
 import '../../main.dart';
@@ -17,6 +20,22 @@ class MapPickerResult {
   });
 }
 
+class _PlaceSearchResult {
+  final String name;
+  final String address;
+  final double latitude;
+  final double longitude;
+
+  _PlaceSearchResult({
+    required this.name,
+    required this.address,
+    required this.latitude,
+    required this.longitude,
+  });
+
+  LatLng get point => LatLng(latitude, longitude);
+}
+
 class MapPickerScreen extends StatefulWidget {
   const MapPickerScreen({super.key});
 
@@ -25,13 +44,25 @@ class MapPickerScreen extends StatefulWidget {
 }
 
 class _MapPickerScreenState extends State<MapPickerScreen> {
+  // Dán API key đã bật Places API vào đây.
+  // Demo thì để đây được, nhưng nộp public Git thì nên restrict key cẩn thận.
+  static const String _placesApiKey = 'PASTE_YOUR_PLACES_API_KEY_HERE';
+
+  final TextEditingController _searchController = TextEditingController();
+
   GoogleMapController? _mapController;
 
   bool _isDark = ThemeController.isDark;
   bool _isLoading = true;
+  bool _isSearching = false;
   bool _canShowMyLocation = false;
 
+  // Vị trí mặc định: FPT / Hòa Lạc
   LatLng _selectedPoint = const LatLng(21.0136, 105.5259);
+
+  String _selectedAddressText = 'Lat: 21.013600, Lng: 105.525900';
+
+  List<_PlaceSearchResult> _placeResults = [];
 
   @override
   void initState() {
@@ -50,9 +81,34 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
   @override
   void dispose() {
+    _searchController.dispose();
     ThemeController.themeNotifier.removeListener(_updateTheme);
     _mapController?.dispose();
     super.dispose();
+  }
+
+  String _latLngText(LatLng point) {
+    return 'Lat: ${point.latitude.toStringAsFixed(6)}, Lng: ${point.longitude.toStringAsFixed(6)}';
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _moveCamera(
+      LatLng point, {
+        double zoom = 16,
+      }) async {
+    await _mapController?.animateCamera(
+      CameraUpdate.newLatLngZoom(point, zoom),
+    );
   }
 
   Future<void> _loadDefaultLocation() async {
@@ -64,6 +120,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
         setState(() {
           _selectedPoint = const LatLng(21.0136, 105.5259);
+          _selectedAddressText = _latLngText(_selectedPoint);
           _isLoading = false;
           _canShowMyLocation = false;
         });
@@ -84,6 +141,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
         setState(() {
           _selectedPoint = const LatLng(21.0136, 105.5259);
+          _selectedAddressText = _latLngText(_selectedPoint);
           _isLoading = false;
           _canShowMyLocation = false;
         });
@@ -100,19 +158,21 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
       LatLng currentPoint = LatLng(position.latitude, position.longitude);
 
-      //
-      // final bool isEmulatorGooglePlex =
-      //     (position.latitude - 37.421998).abs() < 0.01 &&
-      //         (position.longitude + 122.084000).abs() < 0.01;
+      // Android Emulator hay trả về vị trí mặc định Googleplex bên Mỹ.
+      // Nếu gặp tọa độ đó thì tự đổi về FPT/Hòa Lạc cho dễ demo.
+      final bool isEmulatorGooglePlex =
+          (position.latitude - 37.421998).abs() < 0.01 &&
+              (position.longitude + 122.084000).abs() < 0.01;
 
-      // if (isEmulatorGooglePlex) {
-      //   currentPoint = const LatLng(21.0136, 105.5259);
-      // }
+      if (isEmulatorGooglePlex) {
+        currentPoint = const LatLng(21.0136, 105.5259);
+      }
 
       if (!mounted) return;
 
       setState(() {
         _selectedPoint = currentPoint;
+        _selectedAddressText = _latLngText(currentPoint);
         _isLoading = false;
         _canShowMyLocation = true;
       });
@@ -123,6 +183,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
       setState(() {
         _selectedPoint = const LatLng(21.0136, 105.5259);
+        _selectedAddressText = _latLngText(_selectedPoint);
         _isLoading = false;
         _canShowMyLocation = false;
       });
@@ -131,36 +192,300 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     }
   }
 
-  Future<void> _moveCamera(LatLng point) async {
-    await _mapController?.animateCamera(
-      CameraUpdate.newLatLngZoom(point, 16),
-    );
-  }
-
   Future<void> _goToMyLocation() async {
     if (!mounted) return;
 
     setState(() {
       _isLoading = true;
+      _placeResults = [];
     });
 
     await _loadDefaultLocation();
+  }
+
+  Future<void> _searchPlaces() async {
+    final String query = _searchController.text.trim();
+
+    if (query.isEmpty) {
+      _showMessage('Nhập địa điểm cần tìm');
+      return;
+    }
+
+    if (_placesApiKey == 'PASTE_YOUR_PLACES_API_KEY_HERE') {
+      _showMessage('Bạn chưa thay Places API key trong code');
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+
+    setState(() {
+      _isSearching = true;
+      _placeResults = [];
+    });
+
+    try {
+      final Uri uri = Uri.parse(
+        'https://places.googleapis.com/v1/places:searchText',
+      );
+
+      final http.Response response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': _placesApiKey,
+          'X-Goog-FieldMask':
+          'places.displayName,places.formattedAddress,places.location',
+        },
+        body: jsonEncode({
+          'textQuery': query,
+          'languageCode': 'vi',
+          'regionCode': 'VN',
+        }),
+      );
+
+      final Map<String, dynamic> data = jsonDecode(response.body);
+
+      if (response.statusCode != 200) {
+        final String errorMessage =
+            data['error']?['message']?.toString() ?? 'Không rõ lỗi';
+
+        _showMessage('Lỗi Places API: $errorMessage');
+        return;
+      }
+
+      final List<dynamic> places = data['places'] as List<dynamic>? ?? [];
+
+      if (places.isEmpty) {
+        _showMessage('Không tìm thấy địa điểm: $query');
+        return;
+      }
+
+      final List<_PlaceSearchResult> results = [];
+
+      for (final dynamic item in places.take(6)) {
+        if (item is! Map<String, dynamic>) continue;
+
+        final Map<String, dynamic>? displayName =
+        item['displayName'] is Map<String, dynamic>
+            ? item['displayName'] as Map<String, dynamic>
+            : null;
+
+        final Map<String, dynamic>? location =
+        item['location'] is Map<String, dynamic>
+            ? item['location'] as Map<String, dynamic>
+            : null;
+
+        if (location == null) continue;
+
+        final double? lat = (location['latitude'] as num?)?.toDouble();
+        final double? lng = (location['longitude'] as num?)?.toDouble();
+
+        if (lat == null || lng == null) continue;
+
+        final String name = displayName?['text']?.toString() ??
+            item['formattedAddress']?.toString() ??
+            'Địa điểm không rõ tên';
+
+        final String address = item['formattedAddress']?.toString() ?? '';
+
+        results.add(
+          _PlaceSearchResult(
+            name: name,
+            address: address,
+            latitude: lat,
+            longitude: lng,
+          ),
+        );
+      }
+
+      if (results.isEmpty) {
+        _showMessage('Không lấy được tọa độ từ kết quả tìm kiếm');
+        return;
+      }
+
+      setState(() {
+        _placeResults = results;
+      });
+
+      await _selectSearchResult(results.first, closeResultPanel: false);
+    } catch (e) {
+      _showMessage('Lỗi tìm kiếm địa điểm: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSearching = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _selectSearchResult(
+      _PlaceSearchResult result, {
+        bool closeResultPanel = true,
+      }) async {
+    final LatLng point = result.point;
+
+    setState(() {
+      _selectedPoint = point;
+      _selectedAddressText =
+      '${result.name} - ${result.address} | ${_latLngText(point)}';
+
+      if (closeResultPanel) {
+        _placeResults = [];
+      }
+    });
+
+    await _moveCamera(point, zoom: 16);
+  }
+
+  void _selectPointFromMap(LatLng point) {
+    setState(() {
+      _selectedPoint = point;
+      _selectedAddressText = _latLngText(point);
+      _placeResults = [];
+    });
   }
 
   void _confirmLocation() {
     final result = MapPickerResult(
       latitude: _selectedPoint.latitude,
       longitude: _selectedPoint.longitude,
-      addressText:
-      'Lat: ${_selectedPoint.latitude.toStringAsFixed(6)}, Lng: ${_selectedPoint.longitude.toStringAsFixed(6)}',
+      addressText: _selectedAddressText,
     );
 
     Navigator.pop(context, result);
   }
 
+  Widget _buildSearchBox({
+    required Color textColor,
+    required Color cardColor,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.18),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: _searchController,
+        style: TextStyle(color: textColor),
+        textInputAction: TextInputAction.search,
+        onSubmitted: (_) => _searchPlaces(),
+        decoration: InputDecoration(
+          hintText: 'Tìm Long Biên, Hai Bà Trưng, Nghệ An...',
+          hintStyle: const TextStyle(
+            color: AppColors.textMuted,
+            fontSize: 13,
+          ),
+          prefixIcon: const Icon(
+            Icons.search,
+            color: AppColors.textMuted,
+          ),
+          suffixIcon: _isSearching
+              ? const Padding(
+            padding: EdgeInsets.all(14),
+            child: SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.primary,
+              ),
+            ),
+          )
+              : IconButton(
+            icon: const Icon(
+              Icons.send_rounded,
+              color: AppColors.primary,
+            ),
+            onPressed: _searchPlaces,
+          ),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 16,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchResults({
+    required Color textColor,
+    required Color cardColor,
+  }) {
+    if (_placeResults.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      constraints: const BoxConstraints(
+        maxHeight: 270,
+      ),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.18),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ListView.separated(
+        shrinkWrap: true,
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        itemCount: _placeResults.length,
+        separatorBuilder: (_, __) => Divider(
+          height: 1,
+          color: AppColors.textMuted.withOpacity(0.15),
+        ),
+        itemBuilder: (context, index) {
+          final _PlaceSearchResult result = _placeResults[index];
+
+          return ListTile(
+            dense: true,
+            leading: const Icon(
+              Icons.place_rounded,
+              color: AppColors.primary,
+            ),
+            title: Text(
+              result.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: textColor,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
+            subtitle: Text(
+              result.address,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 11,
+              ),
+            ),
+            onTap: () => _selectSearchResult(result),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final textColor = _isDark ? Colors.white : Colors.black87;
+    final Color textColor = _isDark ? Colors.white : Colors.black87;
+    final Color cardColor = _isDark ? AppColors.cardBg : Colors.white;
 
     return Scaffold(
       backgroundColor: _isDark ? AppColors.background : const Color(0xFFF8F9FA),
@@ -200,33 +525,49 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                 position: _selectedPoint,
                 draggable: true,
                 onDragEnd: (point) {
-                  setState(() {
-                    _selectedPoint = point;
-                  });
+                  _selectPointFromMap(point);
                 },
               ),
             },
             onTap: (point) {
-              setState(() {
-                _selectedPoint = point;
-              });
+              _selectPointFromMap(point);
             },
           ),
 
           Positioned(
+            left: 16,
             right: 16,
             top: 16,
-            child: FloatingActionButton(
-              heroTag: 'my_location_btn',
-              mini: true,
-              backgroundColor: AppColors.primary,
-              onPressed: _goToMyLocation,
-              child: const Icon(
-                Icons.my_location,
-                color: AppColors.background,
-              ),
+            child: Column(
+              children: [
+                _buildSearchBox(
+                  textColor: textColor,
+                  cardColor: cardColor,
+                ),
+                const SizedBox(height: 8),
+                _buildSearchResults(
+                  textColor: textColor,
+                  cardColor: cardColor,
+                ),
+              ],
             ),
           ),
+
+          if (_placeResults.isEmpty)
+            Positioned(
+              right: 16,
+              top: 86,
+              child: FloatingActionButton(
+                heroTag: 'my_location_btn',
+                mini: true,
+                backgroundColor: AppColors.primary,
+                onPressed: _goToMyLocation,
+                child: const Icon(
+                  Icons.my_location,
+                  color: AppColors.background,
+                ),
+              ),
+            ),
 
           if (_isLoading)
             Container(
@@ -245,7 +586,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: _isDark ? AppColors.cardBg : Colors.white,
+                color: cardColor,
                 borderRadius: BorderRadius.circular(18),
                 boxShadow: [
                   BoxShadow(
@@ -259,7 +600,8 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'Chạm bản đồ hoặc kéo pin để chọn vị trí',
+                    'Tìm kiếm, chạm bản đồ hoặc kéo pin để chọn vị trí',
+                    textAlign: TextAlign.center,
                     style: TextStyle(
                       color: textColor,
                       fontWeight: FontWeight.bold,
@@ -267,7 +609,10 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Lat: ${_selectedPoint.latitude.toStringAsFixed(6)}, Lng: ${_selectedPoint.longitude.toStringAsFixed(6)}',
+                    _selectedAddressText,
+                    textAlign: TextAlign.center,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: AppColors.textMuted,
                       fontSize: 12,
