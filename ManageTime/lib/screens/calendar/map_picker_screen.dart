@@ -46,7 +46,7 @@ class MapPickerScreen extends StatefulWidget {
 class _MapPickerScreenState extends State<MapPickerScreen> {
   // Dán API key đã bật Places API vào đây.
   // Demo thì để đây được, nhưng nộp public Git thì nên restrict key cẩn thận.
-  static const String _placesApiKey = 'PASTE_YOUR_PLACES_API_KEY_HERE';
+  static const String _placesApiKey = 'AIzaSyD4SwFBeyIEATumwppuVBQWBc1UGSCQthk';
 
   final TextEditingController _searchController = TextEditingController();
 
