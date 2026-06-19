@@ -20,14 +20,12 @@ class MapPickerResult {
   });
 }
 
-class _PlaceSearchResult {
-  final String name;
+class _GeoSearchResult {
   final String address;
   final double latitude;
   final double longitude;
 
-  _PlaceSearchResult({
-    required this.name,
+  _GeoSearchResult({
     required this.address,
     required this.latitude,
     required this.longitude,
@@ -44,10 +42,6 @@ class MapPickerScreen extends StatefulWidget {
 }
 
 class _MapPickerScreenState extends State<MapPickerScreen> {
-  // Dán API key đã bật Places API vào đây.
-  // Demo thì để đây được, nhưng nộp public Git thì nên restrict key cẩn thận.
-  static const String _placesApiKey = 'AIzaSyD4SwFBeyIEATumwppuVBQWBc1UGSCQthk';
-
   final TextEditingController _searchController = TextEditingController();
 
   GoogleMapController? _mapController;
@@ -57,12 +51,11 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
   bool _isSearching = false;
   bool _canShowMyLocation = false;
 
-  // Vị trí mặc định: FPT / Hòa Lạc
   LatLng _selectedPoint = const LatLng(21.0136, 105.5259);
 
   String _selectedAddressText = 'Lat: 21.013600, Lng: 105.525900';
 
-  List<_PlaceSearchResult> _placeResults = [];
+  List<_GeoSearchResult> _searchResults = [];
 
   @override
   void initState() {
@@ -72,11 +65,11 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
   }
 
   void _updateTheme() {
-    if (mounted) {
-      setState(() {
-        _isDark = ThemeController.isDark;
-      });
-    }
+    if (!mounted) return;
+
+    setState(() {
+      _isDark = ThemeController.isDark;
+    });
   }
 
   @override
@@ -158,8 +151,6 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
       LatLng currentPoint = LatLng(position.latitude, position.longitude);
 
-      // Android Emulator hay trả về vị trí mặc định Googleplex bên Mỹ.
-      // Nếu gặp tọa độ đó thì tự đổi về FPT/Hòa Lạc cho dễ demo.
       final bool isEmulatorGooglePlex =
           (position.latitude - 37.421998).abs() < 0.01 &&
               (position.longitude + 122.084000).abs() < 0.01;
@@ -197,22 +188,17 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
     setState(() {
       _isLoading = true;
-      _placeResults = [];
+      _searchResults = [];
     });
 
     await _loadDefaultLocation();
   }
 
-  Future<void> _searchPlaces() async {
-    final String query = _searchController.text.trim();
+  Future<void> _searchLocation() async {
+    final String rawQuery = _searchController.text.trim();
 
-    if (query.isEmpty) {
+    if (rawQuery.isEmpty) {
       _showMessage('Nhập địa điểm cần tìm');
-      return;
-    }
-
-    if (_placesApiKey == 'PASTE_YOUR_PLACES_API_KEY_HERE') {
-      _showMessage('Bạn chưa thay Places API key trong code');
       return;
     }
 
@@ -220,77 +206,70 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
     setState(() {
       _isSearching = true;
-      _placeResults = [];
+      _searchResults = [];
     });
 
     try {
-      final Uri uri = Uri.parse(
-        'https://places.googleapis.com/v1/places:searchText',
+      String query = rawQuery;
+
+      final String lowerQuery = query.toLowerCase();
+
+      if (!lowerQuery.contains('việt nam') &&
+          !lowerQuery.contains('viet nam') &&
+          !lowerQuery.contains('vietnam')) {
+        query = '$query, Việt Nam';
+      }
+
+      final Uri uri = Uri.https(
+        'nominatim.openstreetmap.org',
+        '/search',
+        {
+          'q': query,
+          'format': 'json',
+          'addressdetails': '1',
+          'limit': '6',
+          'accept-language': 'vi',
+        },
       );
 
-      final http.Response response = await http.post(
+      final http.Response response = await http.get(
         uri,
         headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': _placesApiKey,
-          'X-Goog-FieldMask':
-          'places.displayName,places.formattedAddress,places.location',
+          'User-Agent': 'ManageTimeFlutterApp/1.0',
         },
-        body: jsonEncode({
-          'textQuery': query,
-          'languageCode': 'vi',
-          'regionCode': 'VN',
-        }),
       );
 
-      final Map<String, dynamic> data = jsonDecode(response.body);
-
       if (response.statusCode != 200) {
-        final String errorMessage =
-            data['error']?['message']?.toString() ?? 'Không rõ lỗi';
-
-        _showMessage('Lỗi Places API: $errorMessage');
+        _showMessage('Lỗi kết nối tìm kiếm địa điểm');
         return;
       }
 
-      final List<dynamic> places = data['places'] as List<dynamic>? ?? [];
+      final dynamic decodedData = jsonDecode(response.body);
 
-      if (places.isEmpty) {
-        _showMessage('Không tìm thấy địa điểm: $query');
+      if (decodedData is! List) {
+        _showMessage('Dữ liệu tìm kiếm không hợp lệ');
         return;
       }
 
-      final List<_PlaceSearchResult> results = [];
+      if (decodedData.isEmpty) {
+        _showMessage('Không tìm thấy địa điểm: $rawQuery');
+        return;
+      }
 
-      for (final dynamic item in places.take(6)) {
+      final List<_GeoSearchResult> parsedResults = [];
+
+      for (final dynamic item in decodedData) {
         if (item is! Map<String, dynamic>) continue;
 
-        final Map<String, dynamic>? displayName =
-        item['displayName'] is Map<String, dynamic>
-            ? item['displayName'] as Map<String, dynamic>
-            : null;
+        final String address = item['display_name']?.toString() ?? rawQuery;
 
-        final Map<String, dynamic>? location =
-        item['location'] is Map<String, dynamic>
-            ? item['location'] as Map<String, dynamic>
-            : null;
-
-        if (location == null) continue;
-
-        final double? lat = (location['latitude'] as num?)?.toDouble();
-        final double? lng = (location['longitude'] as num?)?.toDouble();
+        final double? lat = double.tryParse(item['lat']?.toString() ?? '');
+        final double? lng = double.tryParse(item['lon']?.toString() ?? '');
 
         if (lat == null || lng == null) continue;
 
-        final String name = displayName?['text']?.toString() ??
-            item['formattedAddress']?.toString() ??
-            'Địa điểm không rõ tên';
-
-        final String address = item['formattedAddress']?.toString() ?? '';
-
-        results.add(
-          _PlaceSearchResult(
-            name: name,
+        parsedResults.add(
+          _GeoSearchResult(
             address: address,
             latitude: lat,
             longitude: lng,
@@ -298,16 +277,19 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
         );
       }
 
-      if (results.isEmpty) {
+      if (parsedResults.isEmpty) {
         _showMessage('Không lấy được tọa độ từ kết quả tìm kiếm');
         return;
       }
 
       setState(() {
-        _placeResults = results;
+        _searchResults = parsedResults;
       });
 
-      await _selectSearchResult(results.first, closeResultPanel: false);
+      await _selectSearchResult(
+        parsedResults.first,
+        closeResultPanel: false,
+      );
     } catch (e) {
       _showMessage('Lỗi tìm kiếm địa điểm: $e');
     } finally {
@@ -320,29 +302,28 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
   }
 
   Future<void> _selectSearchResult(
-      _PlaceSearchResult result, {
+      _GeoSearchResult result, {
         bool closeResultPanel = true,
       }) async {
     final LatLng point = result.point;
 
     setState(() {
       _selectedPoint = point;
-      _selectedAddressText =
-      '${result.name} - ${result.address} | ${_latLngText(point)}';
+      _selectedAddressText = '${result.address} | ${_latLngText(point)}';
 
       if (closeResultPanel) {
-        _placeResults = [];
+        _searchResults = [];
       }
     });
 
-    await _moveCamera(point, zoom: 16);
+    await _moveCamera(point, zoom: 15);
   }
 
   void _selectPointFromMap(LatLng point) {
     setState(() {
       _selectedPoint = point;
       _selectedAddressText = _latLngText(point);
-      _placeResults = [];
+      _searchResults = [];
     });
   }
 
@@ -376,9 +357,9 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
         controller: _searchController,
         style: TextStyle(color: textColor),
         textInputAction: TextInputAction.search,
-        onSubmitted: (_) => _searchPlaces(),
+        onSubmitted: (_) => _searchLocation(),
         decoration: InputDecoration(
-          hintText: 'Tìm Long Biên, Hai Bà Trưng, Nghệ An...',
+          hintText: 'Tìm Long Biên, Hòa Bình, Nghệ An...',
           hintStyle: const TextStyle(
             color: AppColors.textMuted,
             fontSize: 13,
@@ -404,7 +385,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
               Icons.send_rounded,
               color: AppColors.primary,
             ),
-            onPressed: _searchPlaces,
+            onPressed: _searchLocation,
           ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
@@ -420,14 +401,12 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     required Color textColor,
     required Color cardColor,
   }) {
-    if (_placeResults.isEmpty) {
+    if (_searchResults.isEmpty) {
       return const SizedBox.shrink();
     }
 
     return Container(
-      constraints: const BoxConstraints(
-        maxHeight: 270,
-      ),
+      constraints: const BoxConstraints(maxHeight: 260),
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(16),
@@ -442,13 +421,13 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       child: ListView.separated(
         shrinkWrap: true,
         padding: const EdgeInsets.symmetric(vertical: 6),
-        itemCount: _placeResults.length,
+        itemCount: _searchResults.length,
         separatorBuilder: (_, __) => Divider(
           height: 1,
           color: AppColors.textMuted.withOpacity(0.15),
         ),
         itemBuilder: (context, index) {
-          final _PlaceSearchResult result = _placeResults[index];
+          final _GeoSearchResult result = _searchResults[index];
 
           return ListTile(
             dense: true,
@@ -457,8 +436,8 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
               color: AppColors.primary,
             ),
             title: Text(
-              result.name,
-              maxLines: 1,
+              result.address,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: textColor,
@@ -467,8 +446,8 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
               ),
             ),
             subtitle: Text(
-              result.address,
-              maxLines: 2,
+              _latLngText(result.point),
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: AppColors.textMuted,
@@ -524,14 +503,10 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                 markerId: const MarkerId('selected_location'),
                 position: _selectedPoint,
                 draggable: true,
-                onDragEnd: (point) {
-                  _selectPointFromMap(point);
-                },
+                onDragEnd: _selectPointFromMap,
               ),
             },
-            onTap: (point) {
-              _selectPointFromMap(point);
-            },
+            onTap: _selectPointFromMap,
           ),
 
           Positioned(
@@ -553,7 +528,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             ),
           ),
 
-          if (_placeResults.isEmpty)
+          if (_searchResults.isEmpty)
             Positioned(
               right: 16,
               top: 86,

@@ -11,8 +11,8 @@ class EventModel {
   String type; // 'Meeting', 'Fitness', 'Deadline', 'Other'
   String sticker; // Sticker icon name or emoji
   bool isAllDay;
-  int reminderMinutes; // Báo trước bao nhiêu phút
-  String repeatInterval; // 'None', 'Daily', 'Weekly', 'Monthly'
+  int reminderMinutes;
+  String repeatInterval;
   String userEmail;
 
   EventModel({
